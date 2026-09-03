@@ -14,6 +14,7 @@ import type { Parser, ParseResult, RawRow } from "../core/types.js";
 export const rbcParser: Parser = {
   id: "rbc",
   label: "RBC",
+  hint: 'An "Account Type" and "Description 1" header, amounts in CAD$.',
 
   detect(text) {
     const head = text.slice(0, 800).toLowerCase();

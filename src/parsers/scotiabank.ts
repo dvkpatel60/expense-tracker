@@ -16,6 +16,7 @@ import type { Parser, ParseResult, RawRow } from "../core/types.js";
 export const scotiabankParser: Parser = {
   id: "scotiabank",
   label: "Scotiabank",
+  hint: "Headerless rows starting with a M/D/Y date, or any export naming Scotiabank.",
 
   detect(text) {
     const first = text.trim().split(/\r?\n/)[0] ?? "";

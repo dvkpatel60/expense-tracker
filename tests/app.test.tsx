@@ -255,6 +255,61 @@ describe("App", () => {
     expect(body.options.focus).toBe(pinned);
   });
 
+  it("says which filters emptied the list and offers to clear them", async () => {
+    const user = await boot();
+    await user.click(screen.getByRole("button", { name: /^Activity/ }));
+    await user.type(search(), "nothing will ever match this");
+
+    // Not just "nothing matches": the reader is told it was the filters, and
+    // handed the one action that undoes them.
+    expect(await screen.findByText(/nothing matches those filters/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /clear filters/i }));
+
+    expect(screen.queryByText(/nothing matches those filters/i)).toBeNull();
+    expect((search() as HTMLInputElement).value).toBe("");
+  });
+
+  it("separates the status facets from the category facets", async () => {
+    const user = await boot();
+    await user.click(screen.getByRole("button", { name: /^Activity/ }));
+
+    // Twenty-three chips in one wrap is a wall; they are two questions.
+    const status = within(screen.getByRole("group", { name: "Status" }));
+    expect(status.getByRole("button", { name: "Not split" })).toBeTruthy();
+    const categories = screen.getByRole("group", { name: "Category" });
+    expect(within(categories).queryByRole("button", { name: "Not split" })).toBeNull();
+    expect(within(categories).getAllByRole("button").length).toBeGreaterThan(1);
+  });
+
+  it("explains why rows would be skipped before the import happens", async () => {
+    const user = await boot();
+    await user.click(screen.getByRole("button", { name: /^Import/ }));
+
+    // One readable row and one with no amount at all.
+    await user.click(screen.getByPlaceholderText(/paste the contents/i));
+    await user.paste(
+      ["Date,Description,Amount", "2026-08-01,COFFEE,-4.50", "2026-08-02,MYSTERY,"].join("\n")
+    );
+
+    // The count is stated up front, and the parser's own reason is one click
+    // away rather than a post-hoc status line.
+    const detected = document.querySelector(".detected") as HTMLElement;
+    expect(detected.textContent).toMatch(/1 rows readable/);
+    await user.click(within(detected).getByText(/why 1 rows were skipped/i));
+    expect(detected.querySelector(".rejects ul")?.textContent).toBeTruthy();
+  });
+
+  it("names what each institution's export looks like", async () => {
+    const user = await boot();
+    await user.click(screen.getByRole("button", { name: /^Import/ }));
+    await user.click(screen.getByText(/what each export looks like/i));
+
+    // The hint lives on the parser beside its detect(), so this is the
+    // registry talking, not a hand-maintained second list.
+    expect(screen.getByText(/transaction_type/)).toBeTruthy();
+    expect(screen.getByText(/date column and an amount/i)).toBeTruthy();
+  });
+
   /** The ring's key labels, which are the groups until a drill replaces them
    *  with that group's categories. Read from the DOM rather than by role,
    *  because the SVG is aria-hidden and the key is the text equivalent. */

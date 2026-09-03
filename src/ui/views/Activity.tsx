@@ -118,6 +118,15 @@ export function Activity({
     initialRect: { width: 960, height: 640 },
   });
 
+  const narrowed =
+    filter !== "all" || categories.length > 0 || account !== "all" || query.trim() !== "";
+  const clearFilters = (): void => {
+    setFilter("all");
+    setCategories([]);
+    setAccount("all");
+    setQuery("");
+  };
+
   const toggleCategory = (id: CategoryId): void => {
     setCategories((prev) =>
       prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
@@ -166,6 +175,10 @@ export function Activity({
         )}
       </div>
 
+      {/* Twenty-three chips across two undifferentiated rows read as one long
+          list of unrelated switches. They are two different questions — which
+          rows, and which categories — so they are asked separately, and the
+          category row scrolls rather than wrapping into a wall. */}
       <div className="facets">
         <div className="facet-row">
           <input
@@ -189,31 +202,50 @@ export function Activity({
               ))}
             </select>
           )}
-          {KIND_FILTERS.map(([id, label]) => (
-            <button
-              key={id}
-              className="filter"
-              aria-pressed={filter === id}
-              onClick={() => setFilter(id)}
-            >
-              {label}
-            </button>
-          ))}
         </div>
-        <div className="facet-row">
-          {presentCategories.map((id) => (
-            <button
-              key={id}
-              className="filter cat"
-              style={{ "--chipc": categoryColor(id) } as CSSProperties}
-              aria-pressed={categories.includes(id)}
-              onClick={() => toggleCategory(id)}
-            >
-              <i />
-              {id}
-            </button>
-          ))}
+
+        <div className="facet-group">
+          <span className="facet-legend">Status</span>
+          <div className="facet-chips" role="group" aria-label="Status">
+            {KIND_FILTERS.map(([id, label]) => (
+              <button
+                key={id}
+                className="filter"
+                aria-pressed={filter === id}
+                onClick={() => setFilter(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {presentCategories.length > 0 && (
+          <div className="facet-group">
+            <span className="facet-legend">
+              Category
+              {categories.length > 0 && (
+                <button className="facet-clear" onClick={() => setCategories([])}>
+                  Clear {categories.length}
+                </button>
+              )}
+            </span>
+            <div className="facet-chips scroll" role="group" aria-label="Category">
+              {presentCategories.map((id) => (
+                <button
+                  key={id}
+                  className="filter cat"
+                  style={{ "--chipc": categoryColor(id) } as CSSProperties}
+                  aria-pressed={categories.includes(id)}
+                  onClick={() => toggleCategory(id)}
+                >
+                  <i />
+                  {id}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="table">
@@ -227,7 +259,23 @@ export function Activity({
         </div>
         <div ref={scrollRef} className="tbody">
           {rows.length === 0 ? (
-            <div className="table-empty">Nothing matches that.</div>
+            <div className="table-empty">
+              {/* An empty state that only reports the emptiness leaves the
+                  reader to work out which of five filters did it. */}
+              {narrowed ? (
+                <>
+                  <p>Nothing matches those filters.</p>
+                  <button className="btn secondary" onClick={clearFilters}>
+                    Clear filters
+                  </button>
+                </>
+              ) : (
+                <p>
+                  Nothing in {period ? "this month" : "the ledger"} yet. Import an export and
+                  rows land here.
+                </p>
+              )}
+            </div>
           ) : (
             <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
               {virtual.getVirtualItems().map((item) => {

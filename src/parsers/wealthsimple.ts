@@ -12,6 +12,7 @@ import type { Parser, ParseResult, RawRow } from "../core/types.js";
 export const wealthsimpleParser: Parser = {
   id: "wealthsimple",
   label: "Wealthsimple",
+  hint: 'A "transaction_type" column, usually alongside a running balance.',
 
   detect(text) {
     const head = text.slice(0, 800).toLowerCase();

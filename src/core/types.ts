@@ -49,6 +49,10 @@ export interface ParseResult {
 export interface Parser {
   readonly id: FiId;
   readonly label: string;
+  /** What this parser recognizes, in the reader's terms — shown on the import
+   *  screen so a bare dropzone is not the only instruction. It lives beside
+   *  detect() precisely so the two cannot drift apart. */
+  readonly hint: string;
   /** 0 means "not mine". Highest score wins detection. */
   detect(text: string): number;
   parse(text: string): ParseResult;

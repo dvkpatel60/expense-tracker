@@ -31,9 +31,14 @@
 
   --ink: #1c1b22;
   --ink-2: #5f5b55;
-  --ink-3: #8f8a82;
+  /* Was #8f8a82, which is 3.4:1 on white and 3.1:1 on the canvas — under AA
+     for the 11-13px secondary text this carries almost everywhere. Darkened
+     to clear 4.5:1 on all three surfaces (white 5.1, panel-2 4.8, canvas 4.6). */
+  --ink-3: #726d65;
 
-  /* Gold: --accent fills, --accent-ink for text that must hold contrast. */
+  /* Gold: --accent fills, --accent-ink for text that must hold contrast.
+     --accent is 3.9:1 on white, so it is legal on large bold figures (the hero
+     KPI) and decoration, and never on body text. Use --accent-ink there. */
   --accent: #9a7e2f;
   --accent-ink: #7a6220;
   --accent-hover: #866c26;
@@ -91,11 +96,17 @@
   --ui: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
+  /* One modular scale, ratio ~1.19 off a 14px base. Every font-size in the
+     app is one of these; a one-off rem value is how two headings that should
+     match end up a pixel apart. */
   --step--2: 0.6875rem;
   --step--1: 0.8125rem;
   --step-0: 0.875rem;
   --step-1: 1rem;
-  --step-2: 1.375rem;
+  --step-2: 1.1875rem;
+  --step-3: 1.375rem;
+  --step-4: 1.625rem;
+  --step-5: 2rem;
 
   --radius: 8px;
   --radius-lg: 10px;
@@ -193,7 +204,7 @@ input, select, textarea { font: inherit; color: inherit; }
   font-size: var(--step-0);
   font-weight: 500;
   text-align: left;
-  transition: background 120ms, color 120ms;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .nav button:hover { background: var(--rail-2); color: #fff; }
 .nav button[aria-current="page"] {
@@ -243,7 +254,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .topbar-titles { min-width: 0; }
 .view-title {
   margin: 0;
-  font-size: var(--step-2);
+  font-size: var(--step-3);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
@@ -359,7 +370,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .kpi-value {
   display: block;
   margin-top: 0.3rem;
-  font-size: 1.9rem;
+  font-size: var(--step-5);
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.1;
@@ -448,6 +459,26 @@ input, select, textarea { font: inherit; color: inherit; }
 .bar > i { display: block; height: 100%; border-radius: 3px; background: var(--shared); }
 .bar > i > b { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 
+/* ====================================================================
+   The interaction contract.
+
+   Every chart and every list obeys one of two rules, and no component
+   invents a third:
+
+   1. MARKS (donut slices, treemap cells) dim their siblings on hover, so
+      the thing under the pointer is the only one at full strength. The
+      container carries `:hover { opacity: .55 }` on its marks and the mark
+      itself takes it back.
+   2. ROWS (ranked categories, lens rows, insight cards, workflow buttons)
+      highlight themselves and leave their siblings alone — dimming a list
+      of text is noise, not emphasis.
+
+   Both use --dur-fast and --ease-out, both are reachable by keyboard with
+   the same visual result, and the global :focus-visible ring is never
+   overridden. Tooltips and the lens are placed against the trigger's own
+   rect, flipping when there is no room, never nested inside a scroller.
+   ==================================================================== */
+
 /* ---------- donut + breakdown ---------- */
 
 .breakdown {
@@ -497,6 +528,13 @@ input, select, textarea { font: inherit; color: inherit; }
 .tm-label {
   font-size: 10px;
   fill: #fff;
+  /* Cells range from --cat-housing to --cat-reimbursement, so no single fill
+     is legible on all of them. The outline guarantees the label reads on every
+     cell rather than only the dark half. */
+  paint-order: stroke;
+  stroke: rgba(28, 27, 34, 0.45);
+  stroke-width: 2px;
+  stroke-linejoin: round;
   pointer-events: none;
 }
 .donut { position: relative; flex: none; }
@@ -515,7 +553,7 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .donut-total {
   display: block;
-  font-size: 1.05rem;
+  font-size: var(--step-1);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -570,7 +608,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .lens-title { font-weight: 600; font-size: var(--step--1); }
 .lens-context { color: var(--ink-3); font-size: var(--step--2); }
 .lens-close {
-  margin-left: auto; color: var(--ink-3); font-size: 1rem; line-height: 1;
+  margin-left: auto; color: var(--ink-3); font-size: var(--step-1); line-height: 1;
   padding: 0 0.15rem;
   transition: color var(--dur-fast) var(--ease-out);
 }
@@ -824,7 +862,7 @@ input, select, textarea { font: inherit; color: inherit; }
   font-size: var(--step--1);
   font-weight: 600;
   white-space: nowrap;
-  transition: background 120ms;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-primary:disabled { background: var(--line-2); color: var(--ink-3); cursor: not-allowed; }
@@ -951,7 +989,36 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   box-shadow: var(--shadow);
 }
 .facet-row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
-.facet-row + .facet-row { padding-top: 0.6rem; border-top: 1px solid var(--line); }
+
+/* Two questions, asked separately: which rows, and which categories. Twenty
+   three chips in one undifferentiated wrap read as a wall of switches. */
+.facet-group { display: grid; gap: 0.35rem; padding-top: 0.6rem; }
+.facet-group + .facet-group { border-top: 1px solid var(--line); }
+.facet-legend {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  color: var(--ink-3);
+  font-size: var(--step--2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.facet-clear {
+  color: var(--accent-ink);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.facet-clear:hover { color: var(--accent-hover); }
+.facet-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+/* Twenty-one categories wrap into four rows and push the table off screen, so
+   the category row scrolls sideways instead of growing downwards. */
+.facet-chips.scroll {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
+}
+.facet-chips.scroll > .filter { flex: none; }
 
 .search {
   flex: 1;
@@ -974,7 +1041,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   white-space: nowrap;
   font-size: var(--step--1);
   font-weight: 500;
-  transition: color 120ms, border-color 120ms, background 120ms;
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
 .filter:hover { color: var(--ink); border-color: var(--ink-3); }
 .filter[aria-pressed="true"] {
@@ -1043,7 +1110,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   padding: 0.6rem 1.1rem;
   text-align: left;
   border-bottom: 1px solid var(--line);
-  transition: background 100ms;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 .trow:hover { background: var(--accent-soft); }
 .trow-date { color: var(--ink-3); font-size: var(--step--1); white-space: nowrap; }
@@ -1064,7 +1131,16 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 .trow-share { text-align: right; white-space: nowrap; color: var(--green); font-size: var(--step--1); font-weight: 600; }
 .trow-share.full { color: var(--ink-3); font-weight: 400; }
 
-.table-empty { padding: 2.5rem 1.1rem; color: var(--ink-3); text-align: center; }
+.table-empty {
+  padding: 2.5rem 1.1rem;
+  color: var(--ink-3);
+  text-align: center;
+  display: grid;
+  gap: 0.9rem;
+  justify-items: center;
+}
+.table-empty p { margin: 0; }
+.table-empty .btn { max-width: 200px; }
 
 /* ---------- accounts + balance sheet ---------- */
 
@@ -1076,13 +1152,13 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 .sheet-figure {
   display: block;
   margin-top: 0.2rem;
-  font-size: 1.5rem;
+  font-size: var(--step-4);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
 .sheet-figure.owing { color: var(--amber-ink); }
-.sheet-figure.strong { font-size: 1.75rem; }
+.sheet-figure.strong { font-size: var(--step-4); }
 .sheet-delta {
   display: block;
   margin-top: 0.3rem;
@@ -1202,8 +1278,8 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 }
 .grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--line-2); margin: 0 auto 1.25rem; }
 .sheet-head { margin-bottom: 1.5rem; }
-.sheet-merchant { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
-.sheet-amount { font-size: 2rem; font-weight: 600; letter-spacing: -0.03em; margin-top: 0.25rem; }
+.sheet-merchant { font-size: var(--step-2); font-weight: 600; letter-spacing: -0.02em; }
+.sheet-amount { font-size: var(--step-5); font-weight: 600; letter-spacing: -0.03em; margin-top: 0.25rem; }
 .sheet-note { color: var(--ink-2); margin-top: 0.4rem; font-size: var(--step--1); }
 .raw {
   font-family: var(--mono);
@@ -1244,7 +1320,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   border-radius: var(--radius);
   background: var(--accent); color: #fff;
   font-weight: 600; text-align: center;
-  transition: background 120ms;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 .btn:hover { background: var(--accent-hover); }
 .btn:disabled { background: var(--line-2); color: var(--ink-3); cursor: not-allowed; }
@@ -1358,7 +1434,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 }
 .item-remove {
   color: var(--ink-3);
-  font-size: 1.1rem;
+  font-size: var(--step-1);
   line-height: 1;
   padding: 0.3rem 0.5rem;
   border-radius: var(--radius);
@@ -1419,6 +1495,52 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   background: var(--panel);
 }
 .dropzone.drag { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Three steps, because the dropzone alone never said that naming the account
+   and splitting bills were still ahead of you. */
+.steps { list-style: none; display: grid; gap: 0.4rem; margin: 0 0 1rem; padding: 0; }
+.step {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.step-n {
+  display: grid; place-content: center;
+  width: 1.4rem; height: 1.4rem; flex: none;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  color: var(--ink-3);
+  font-size: var(--step--2);
+  font-weight: 600;
+}
+.step-body { display: grid; gap: 0.05rem; font-size: var(--step--1); }
+.step-body span { color: var(--ink-3); font-size: var(--step--2); }
+.step.on { border-color: var(--accent-line); background: var(--accent-soft); }
+.step.on .step-n { background: var(--accent); border-color: var(--accent); color: #fff; }
+.step.done .step-n { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+
+.fi-hints { margin-top: 0.7rem; font-size: var(--step--2); }
+.fi-hints summary { color: var(--ink-2); cursor: pointer; }
+.fi-hints ul { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.35rem; }
+.fi-hints li { display: grid; gap: 0.05rem; }
+.fi-hints li span { color: var(--ink-3); }
+
+/* The parsers have always reported why a row was unreadable; this is the
+   first place that reaches the person holding the file. */
+.rejects { margin-top: 0.5rem; }
+.rejects summary { color: var(--amber-ink); cursor: pointer; font-size: var(--step--2); }
+.rejects ul {
+  list-style: none; margin: 0.4rem 0 0; padding: 0.5rem 0.6rem;
+  display: grid; gap: 0.25rem;
+  background: var(--amber-soft);
+  border-radius: var(--radius);
+  font-size: var(--step--2);
+  color: var(--ink-2);
+}
 .dropzone p { color: var(--ink-2); margin: 0.5rem 0 1.1rem; font-size: var(--step--1); }
 .paste {
   width: 100%; min-height: 110px;
@@ -1461,7 +1583,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
 }
-.empty h2 { font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.empty h2 { font-size: var(--step-3); font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
 .empty p { color: var(--ink-2); margin: 0 auto 1.5rem; max-width: 36ch; font-size: var(--step--1); }
 
 .fine { color: var(--ink-3); font-size: var(--step--2); line-height: 1.55; margin: 0; }
@@ -1503,7 +1625,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   .topbar, .filterbar { padding-left: 1rem; padding-right: 1rem; }
   .filterbar { overflow-x: auto; }
   .content { padding: 1rem 1rem 6rem; }
-  .kpi-value { font-size: 1.75rem; }
+  .kpi-value { font-size: var(--step-4); }
 
   .thead { display: none; }
   .trow {

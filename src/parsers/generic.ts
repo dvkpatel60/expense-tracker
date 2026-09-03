@@ -7,6 +7,7 @@ import type { Parser, ParseResult, RawRow } from "../core/types.js";
 export const genericParser: Parser = {
   id: "generic",
   label: "Generic CSV",
+  hint: "Any CSV with a date column and an amount (or debit/credit) column.",
 
   detect(text) {
     const head = text.slice(0, 400).toLowerCase();

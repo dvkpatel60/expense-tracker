@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ACCOUNT_KINDS, ACCOUNT_KIND_LABEL, inferAccountKind } from "../../core/accounts.js";
 import type { AccountKind } from "../../core/types.js";
-import { detectParser } from "../../parsers/index.js";
+import { PARSERS, detectParser, parseStatement } from "../../parsers/index.js";
 import { SAMPLES } from "../samples.js";
 import type { UseLedger } from "../useLedger.js";
 import { ModelPicker } from "../components/ModelPicker.js";
@@ -13,6 +13,17 @@ export function ImportView({ L }: { L: UseLedger }) {  const [text, setText] = u
   const fileRef = useRef<HTMLInputElement>(null);
 
   const detected = text.trim() ? detectParser(text) : null;
+  // A full dry run, not just detection. The parsers already report every row
+  // they could not read and why; showing that before the Import button is
+  // pressed turns "3 rows could not be read" from a post-hoc status line into
+  // something you can act on while you still have the file open.
+  const preview = useMemo(() => (text.trim() ? parseStatement(text) : null), [text]);
+  const rejectionGroups = useMemo(() => {
+    if (!preview) return [];
+    const byReason = new Map<string, number>();
+    for (const r of preview.rejected) byReason.set(r.reason, (byReason.get(r.reason) ?? 0) + 1);
+    return [...byReason.entries()].sort((a, b) => b[1] - a[1]);
+  }, [preview]);
   // Inferred from the name until the user says otherwise. Getting this wrong
   // inverts every net-worth figure, so it is shown rather than assumed.
   const effectiveKind = kind ?? inferAccountKind(label, detected?.parser.id ?? "generic");
@@ -27,6 +38,32 @@ export function ImportView({ L }: { L: UseLedger }) {  const [text, setText] = u
   return (
     <div className="import-grid">
       <div className="import-col">
+        {/* Where you are in a three-step job. The dropzone alone gave no clue
+            that naming the account and splitting bills were still ahead. */}
+        <ol className="steps" aria-label="Import steps">
+          <li className={text.trim() ? "step done" : "step on"}>
+            <span className="step-n">1</span>
+            <span className="step-body">
+              <b>Detect</b>
+              <span>Drop or paste an export; the parser is chosen for you</span>
+            </span>
+          </li>
+          <li className={!text.trim() ? "step" : label.trim() ? "step done" : "step on"}>
+            <span className="step-n">2</span>
+            <span className="step-body">
+              <b>Map</b>
+              <span>Name the account and confirm what kind it is</span>
+            </span>
+          </li>
+          <li className={L.ledger.transactions.length > 0 ? "step done" : "step"}>
+            <span className="step-n">3</span>
+            <span className="step-body">
+              <b>Split</b>
+              <span>Open a purchase in Activity and claim other people&rsquo;s share</span>
+            </span>
+          </li>
+        </ol>
+
         <div
           className={drag ? "dropzone drag" : "dropzone"}
           onDragOver={(e) => {
@@ -60,6 +97,18 @@ export function ImportView({ L }: { L: UseLedger }) {  const [text, setText] = u
           />
         </div>
 
+        <details className="fi-hints">
+          <summary>What each export looks like</summary>
+          <ul>
+            {PARSERS.map((parser) => (
+              <li key={parser.id}>
+                <b>{parser.label}</b>
+                <span>{parser.hint}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+
         <textarea
           className="paste"
           placeholder="or paste the contents"
@@ -67,10 +116,31 @@ export function ImportView({ L }: { L: UseLedger }) {  const [text, setText] = u
           onChange={(e) => setText(e.target.value)}
         />
 
-        {detected && (
+        {detected && preview && (
           <div className="detected">
-            Looks like <b>{detected.parser.label}</b>
-            {detected.confidence < 0.5 && ", though not confidently"}.
+            <div>
+              Looks like <b>{detected.parser.label}</b>
+              {detected.confidence < 0.5 && ", though not confidently"}.{" "}
+              <span className="num">{preview.rows.length}</span> rows readable
+              {preview.rejected.length > 0 && (
+                <>
+                  , <span className="num">{preview.rejected.length}</span> not
+                </>
+              )}
+              .
+            </div>
+            {rejectionGroups.length > 0 && (
+              <details className="rejects">
+                <summary>Why {preview.rejected.length} rows were skipped</summary>
+                <ul>
+                  {rejectionGroups.map(([reason, n]) => (
+                    <li key={reason}>
+                      <span className="num">{n}×</span> {reason}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         )}
 

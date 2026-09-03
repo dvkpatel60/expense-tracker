@@ -212,7 +212,12 @@ export function Overview({
           </div>
 
           {listed.length === 0 && (
-            <div className="insights-empty">No spending in {period ? monthLabel(period) : "this range"}.</div>
+            <div className="insights-empty">
+              No spending in {period ? monthLabel(period) : "this range"}.{" "}
+              {period
+                ? "Pick another month above, or import the export that covers it."
+                : "Import an export and the breakdown fills in."}
+            </div>
           )}
         </section>
       </div>

@@ -29,7 +29,7 @@ them. Read it before changing `normalize.ts`, `split.ts`, or `pairing.ts`.
 ```
 npm run dev              # ./scripts/dev.sh — loads .env, serves app + /api on one port
 npm run dev:vite         # plain Vite, no /api routes
-npm test                 # vitest run — 18 files, 259 tests
+npm test                 # vitest run — 19 files, 271 tests
 npm run test:watch
 npm run typecheck        # tsc --noEmit
 npm run verify           # typecheck + test + build. Run this before claiming done.
@@ -127,7 +127,10 @@ density and tone; do not add comments that restate the code.
 **Adding a financial institution.** One file in `src/parsers/`, one entry in the `PARSERS`
 array in `parsers/index.ts`, one fixture in `src/parsers/__fixtures__/`, one block in
 `tests/parsers.test.ts`. `detect()` returns 0–1 and must stay above `generic`'s ceiling
-(0.2) for files it owns; `generic` is the last resort and deliberately scores low.
+(0.2) for files it owns; `generic` is the last resort and deliberately scores low. The
+`hint` field is required and sits beside `detect()` on purpose: it is what the import
+screen shows the reader about this export's shape, and the two must describe the same
+thing.
 
 **Changing normalization.** `core/normalize.ts` is an ordered list of named steps, each
 individually testable via `traceNormalization`. No step may empty the string (that guard
@@ -195,6 +198,31 @@ Two rules the registry enforces and a new provider must not route around:
 - **`MAX_OUTPUT_TOKENS` is shared.** A ceiling below the batch cap truncates the JSON
   mid-array, which fails the whole batch rather than shortening it — the response cannot be
   parsed at all.
+
+## The design system
+
+Three rules, and `tests/tokens.test.ts` enforces all three rather than trusting anyone to
+remember them.
+
+- **One motion grammar.** `--dur-fast`, `--dur-slow` and `--ease-out` in `tokens.css` are
+  the only timings in the app. No rule carries its own duration or easing — the test
+  fails on a bare `120ms` anywhere outside the `prefers-reduced-motion` guard. The ring's
+  drill reads `--dur-slow` at runtime rather than hard-coding a matching number, and
+  returns 0 under reduced motion so the collapsed first frame never renders.
+- **One type scale.** `--step--2` through `--step-5`, a modular scale off a 14px base.
+  Every `font-size` is one of them; the only exceptions are the two treemap labels, which
+  are drawn in viewBox user-space units where a rem would scale twice.
+- **One interaction contract**, stated in a block comment above the donut CSS. *Marks*
+  (donut slices, treemap cells) dim their siblings on hover; *rows* (ranked categories,
+  lens rows, insight cards, workflow buttons) highlight themselves and leave siblings
+  alone. Nothing overrides the global `:focus-visible` ring.
+
+Colour is checked, not eyeballed: the test computes WCAG contrast for every token used as
+text against all three surfaces (`--panel`, `--panel-2`, `--canvas`) and requires 4.5:1.
+`--ink-3` was `#8f8a82` — 3.1:1 on the canvas, under AA for the 11–13px secondary text it
+carries almost everywhere — and is now `#726d65`. `--accent` is a fill: it is held to the
+3:1 large-text floor and is legal only on the hero KPI figure and decoration; use
+`--accent-ink` for anything else.
 
 ## The privacy boundary
 
