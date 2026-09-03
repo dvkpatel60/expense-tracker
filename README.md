@@ -51,7 +51,7 @@ src/
   enrich/        Merchant lookup behind a provider registry + injectable transport
   ui/            React. Calls the domain, never reimplements it
 dev/             Local API server (Vite plugin) + in-memory SQLite merchant cache
-tests/           185 tests
+tests/           246 tests
 ```
 
 ## Design decisions
@@ -180,7 +180,7 @@ exfiltrate to a third-party origin from the page.
 ```
 npm run dev           # app + /api on http://localhost:5173
 npm run dev:vite      # plain Vite, no /api routes
-npm test              # vitest — 185 tests
+npm test              # vitest — 246 tests
 npm run test:watch
 npm run typecheck     # tsc --noEmit, strict + noUncheckedIndexedAccess
 npm run verify        # typecheck + test + build

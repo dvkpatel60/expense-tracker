@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/ui/App.js";
@@ -176,5 +176,75 @@ describe("App", () => {
     expect(within(priyaCard as HTMLElement).getByText(/settled up/i)).toBeTruthy();
     // And the open-claim badge on the tab is gone.
     expect(screen.getByRole("button", { name: /^People/ }).querySelector(".badge")).toBeNull();
+  });
+
+  /** The ring's key labels, which are the groups until a drill replaces them
+   *  with that group's categories. Read from the DOM rather than by role,
+   *  because the SVG is aria-hidden and the key is the text equivalent. */
+  const ringLabels = (): string[] =>
+    Array.from(document.querySelectorAll(".donut-key-label"), (e) => e.textContent ?? "");
+
+  it("drills the ring from a group into its categories and back", async () => {
+    const user = await boot();
+    await screen.findByText(/where it went/i);
+
+    const groups = ringLabels();
+    expect(groups.length).toBeGreaterThan(1);
+
+    const first = document.querySelector(".donut-key-row") as HTMLButtonElement;
+    await user.click(first);
+
+    // The key now lists what is inside that group, and the group itself is not
+    // one of its own children.
+    expect(ringLabels()).not.toContain(groups[0]);
+    expect(ringLabels().length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: /all groups/i }));
+    expect(ringLabels()).toEqual(groups);
+  });
+
+  it("shows every category at once in the treemap", async () => {
+    const user = await boot();
+    await screen.findByText(/where it went/i);
+    const groups = ringLabels().length;
+
+    await user.click(screen.getByRole("button", { name: /^treemap$/i }));
+
+    // One cell per category, which is strictly more than the six groups the
+    // ring can show, and the ring's own key steps aside for it.
+    expect(document.querySelectorAll(".tm-cell").length).toBeGreaterThan(groups);
+    expect(document.querySelectorAll(".donut-key-row").length).toBe(0);
+  });
+
+  it("pins the category lens and opens a transaction from it", async () => {
+    const user = await boot();
+    await screen.findByText(/where it went/i);
+
+    await user.click(document.querySelector(".cat-row") as HTMLButtonElement);
+
+    const lens = document.querySelector(".lens.pinned") as HTMLElement;
+    expect(lens).toBeTruthy();
+    // Both figures, not just a list of transactions.
+    expect(within(lens).getByText(/your share/i)).toBeTruthy();
+    expect(within(lens).getByText(/cash out/i)).toBeTruthy();
+
+    await user.click(lens.querySelector(".lens-row") as HTMLButtonElement);
+
+    // The drawer took over; the lens got out of the way rather than stacking.
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(document.querySelector(".lens")).toBeNull();
+  });
+
+  it("reads out both cumulative figures for the day under the cursor", async () => {
+    await boot();
+    await screen.findByText(/cumulative spend/i);
+
+    const chart = document.querySelector(".chart") as HTMLElement;
+    fireEvent.mouseMove(chart, { clientX: 240, clientY: 60 });
+
+    const tip = document.querySelector(".chart-tip");
+    expect(tip).toBeTruthy();
+    expect(tip?.textContent).toMatch(/Cash out/);
+    expect(tip?.textContent).toMatch(/Your share/);
   });
 });

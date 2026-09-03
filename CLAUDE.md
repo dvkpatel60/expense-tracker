@@ -29,7 +29,7 @@ them. Read it before changing `normalize.ts`, `split.ts`, or `pairing.ts`.
 ```
 npm run dev              # ./scripts/dev.sh — loads .env, serves app + /api on one port
 npm run dev:vite         # plain Vite, no /api routes
-npm test                 # vitest run — 18 files, 185 tests
+npm test                 # vitest run — 18 files, 246 tests
 npm run test:watch
 npm run typecheck        # tsc --noEmit
 npm run verify           # typecheck + test + build. Run this before claiming done.

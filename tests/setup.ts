@@ -37,6 +37,26 @@ Object.defineProperty(HTMLElement.prototype, "clientHeight", {
   },
 });
 
+/**
+ * happy-dom composites nothing, so an animation here is a state update on a
+ * timer with no picture at the end of it. Declaring reduced motion is the
+ * honest description of this environment, and it keeps the donut drill (which
+ * interpolates its arcs in a requestAnimationFrame loop) deterministic instead
+ * of leaving setState calls in flight after a test finishes.
+ */
+if (!globalThis.matchMedia) {
+  globalThis.matchMedia = ((query: string) => ({
+    matches: query.includes("prefers-reduced-motion"),
+    media: query,
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof matchMedia;
+}
+
 if (!("ResizeObserver" in globalThis)) {
   globalThis.ResizeObserver = class {
     observe(): void {}

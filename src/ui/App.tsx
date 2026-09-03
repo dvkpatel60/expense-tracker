@@ -135,7 +135,7 @@ export function App() {
                 </div>
               )}
 
-              {view === "summary" && <Overview L={L} period={period} onGoto={goto} />}
+              {view === "summary" && <Overview L={L} period={period} onGoto={goto} onOpen={setOpenId} />}
               {view === "activity" && (
                 <Activity L={L} period={period} intent={intent} onOpen={setOpenId} />
               )}

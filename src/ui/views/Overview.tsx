@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { categoryTotals, buildSpendTree, needsAttention, periodTotals, spendIn, avgTransactionTotal, spendingVelocity, settlementRate, topCategoryDelta } from "../../core/ledger.js";
-import type { GroupTotal, SpendGroup } from "../../core/ledger.js";
+import { buildSpendTree, needsAttention, periodTotals, spendIn, avgTransactionTotal, spendingVelocity, settlementRate, topCategoryDelta } from "../../core/ledger.js";
+import type { SpendCategory, SpendGroup } from "../../core/ledger.js";
 import { detectRecurring } from "../../core/recurring.js";
 import { previousPeriod } from "../../core/digest.js";
 import { cents } from "../../core/money.js";
 import type { Cents } from "../../core/money.js";
+import type { CategoryId } from "../../core/types.js";
 import { CategoryDonut } from "../components/CategoryDonut.js";
-import { CategoryLens } from "../components/CategoryLens.js";
+import { CategoryLens, lensTargetForCategory } from "../components/CategoryLens.js";
+import type { LensTarget } from "../components/CategoryLens.js";
 import { InsightsPanel } from "../components/InsightsPanel.js";
 import { ProportionBar, SpendChart } from "../components/SpendChart.js";
 import { Money } from "../components/Money.js";
@@ -21,15 +23,24 @@ export function Overview({
   L,
   period,
   onGoto,
+  onOpen,
 }: {
   L: UseLedger;
   period: string | null;
   onGoto(view: View, intent?: ActivityIntent): void;
+  /** A pinned lens can open a transaction in the drawer without a navigation,
+   *  which is the whole reason it is worth pinning. */
+  onOpen(id: string): void;
 }) {
   const totals = periodTotals(L.ledger, period);
   const previous = period === null ? null : periodTotals(L.ledger, previousPeriod(period));
   const tree = buildSpendTree(L.ledger, period);
-  const categories = categoryTotals(L.ledger, period);
+  // The flattened tree rather than categoryTotals: identical figures (that
+  // function is built from this tree), but it carries the group and the
+  // merchant totals the lens needs, so nothing re-derives them.
+  const categories = tree
+    .flatMap((g) => g.categories)
+    .sort((a, b) => b.yourShare - a.yourShare);
   const spend = spendIn(L.ledger, period);
   const attention = needsAttention(L.ledger, L.today);
   const avg = avgTransactionTotal(L.ledger, period);
@@ -38,12 +49,26 @@ export function Overview({
   const top = period === null ? null : topCategoryDelta(L.ledger, period);
   const recurring = detectRecurring(L.ledger, period);
   const [drilled, setDrilled] = useState<SpendGroup | null>(null);
-  const [lens, setLens] = useState<{ categoryId: string; anchor: DOMRect } | null>(null);
+  const [lens, setLens] = useState<{ target: LensTarget; anchor: DOMRect; pinned: boolean } | null>(
+    null
+  );
+
+  // A pinned lens owns the pointer until it is dismissed; hovering something
+  // else must not yank it away mid-read, which is the difference between a
+  // tooltip and a panel you opened on purpose.
+  const showLens = (target: LensTarget | null, anchor: DOMRect | null): void => {
+    setLens((cur) => {
+      if (cur?.pinned) return cur;
+      return target && anchor ? { target, anchor, pinned: false } : null;
+    });
+  };
+  const pinLens = (target: LensTarget, anchor: DOMRect): void =>
+    setLens({ target, anchor, pinned: true });
 
   // The ranked list follows the ring: drilled into a group, it lists that
   // group's categories, so the two halves of the panel never disagree. Both the
   // ring and the list read the same buildSpendTree pass.
-  const listed = drilled
+  const listed: readonly SpendCategory[] = drilled
     ? (tree.find((g) => g.groupId === drilled.groupId)?.categories ?? [])
     : categories;
   const maxCash = listed.reduce((m, c) => (c.cashOut > m ? c.cashOut : m), cents(1));
@@ -121,7 +146,7 @@ export function Overview({
               Total paid against your share across {period ? monthLabel(period) : "every imported month"}
             </p>
           </div>
-          <SpendChart transactions={spend} claims={L.ledger.claims} />
+          <SpendChart transactions={spend} claims={L.ledger.claims} velocity={velocity} />
         </section>
 
         <section className="panel">
@@ -129,13 +154,19 @@ export function Overview({
             <h2 className="panel-title">Where it went</h2>
             <p className="panel-sub">
               {drilled
-                ? `${drilled.groupId} — hover a row to see what is in it`
-                : "By group; open one to see the categories inside it"}
+                ? `${drilled.groupId} — hover a row to see what is in it, click to pin it`
+                : "By group; open one to see the categories inside it, or switch to the treemap for all of them"}
             </p>
           </div>
 
           <div className="breakdown">
-            <CategoryDonut groups={tree} drilled={drilled} onDrill={setDrilled} />
+            <CategoryDonut
+              groups={tree}
+              drilled={drilled}
+              onDrill={setDrilled}
+              onHover={showLens}
+              onPin={pinLens}
+            />
 
             <div className="breakdown-list">
           {listed.map((c) => (
@@ -143,14 +174,16 @@ export function Overview({
               className="cat-row"
               key={c.categoryId}
               onMouseEnter={(e) =>
-                setLens({ categoryId: c.categoryId, anchor: e.currentTarget.getBoundingClientRect() })
+                showLens(lensTargetForCategory(c), e.currentTarget.getBoundingClientRect())
               }
-              onMouseLeave={() => setLens(null)}
+              onMouseLeave={() => showLens(null, null)}
               onFocus={(e) =>
-                setLens({ categoryId: c.categoryId, anchor: e.currentTarget.getBoundingClientRect() })
+                showLens(lensTargetForCategory(c), e.currentTarget.getBoundingClientRect())
               }
-              onBlur={() => setLens(null)}
-              onClick={() => onGoto("activity", { kind: "all", categoryId: c.categoryId })}
+              onBlur={() => showLens(null, null)}
+              onClick={(e) =>
+                pinLens(lensTargetForCategory(c), e.currentTarget.getBoundingClientRect())
+              }
             >
               <span className="cat-head">
                 <i className="cat-swatch" style={{ background: categoryColor(c.categoryId) }} />
@@ -251,11 +284,25 @@ export function Overview({
 
       {lens && (
         <CategoryLens
-          categoryId={lens.categoryId}
+          target={lens.target}
           anchor={lens.anchor}
+          pinned={lens.pinned}
           transactions={spend}
           claims={L.ledger.claims}
           onClose={() => setLens(null)}
+          onOpenTransaction={(id) => {
+            setLens(null);
+            onOpen(id);
+          }}
+          onOpenActivity={() => {
+            setLens(null);
+            onGoto("activity", {
+              kind: "all",
+              ...(lens.target.kind === "category"
+                ? { categoryId: lens.target.id as CategoryId }
+                : {}),
+            });
+          }}
         />
       )}
     </div>
