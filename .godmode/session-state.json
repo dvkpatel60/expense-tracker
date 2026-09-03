@@ -1,0 +1,9 @@
+{
+  "skill": "dev-team",
+  "phase": "review",
+  "round": 0,
+  "stop_reason": "target_reached",
+  "findings": 5,
+  "consecutive_rounds_without_human": 0,
+  "terse_user_opted_out": false
+}

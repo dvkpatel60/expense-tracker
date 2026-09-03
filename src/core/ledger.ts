@@ -540,7 +540,14 @@ export function avgTransactionTotal(state: LedgerState, period: string | null): 
 export function spendingVelocity(state: LedgerState, period: string | null): Cents {
   const spend = spendIn(state, period);
   if (spend.length === 0) return ZERO;
-  const days = distinctDays(spend.map((t) => t.date));
+  // Calendar days spanned, first to last inclusive — not the number of days
+  // that happen to have a transaction on them. Dividing by active days answers
+  // "how much on a day I spent", which is a different question from the one the
+  // KPI asks, and it made the figure identical to the average transaction
+  // whenever there was at most one purchase a day. It also inflated the spend
+  // chart's constant-rate reference line, which multiplies this by the
+  // calendar span and so implied the reader was under a pace they never set.
+  const days = calendarSpan(spend.map((t) => t.date));
   if (days === 0) return ZERO;
   return cents(Math.round(-sum(spend.map((t) => t.amount)) / days));
 }
@@ -582,9 +589,19 @@ export function topCategoryDelta(
   return best;
 }
 
-function distinctDays(dates: readonly string[]): number {
-  return new Set(dates).size;
+/** Inclusive day count between the earliest and latest date given. One date
+ *  is one day, not zero. */
+function calendarSpan(dates: readonly string[]): number {
+  if (dates.length === 0) return 0;
+  let min = dates[0]!;
+  let max = dates[0]!;
+  for (const d of dates) {
+    if (d < min) min = d;
+    if (d > max) max = d;
+  }
+  return Math.round((Date.parse(max + "T00:00:00Z") - Date.parse(min + "T00:00:00Z")) / 86_400_000) + 1;
 }
+
 
 export interface PersonBalance {
   readonly person: Person;

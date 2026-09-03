@@ -488,6 +488,12 @@ input, select, textarea { font: inherit; color: inherit; }
   align-items: start;
 }
 .breakdown-list { min-width: 0; }
+/* Treemap mode hands the whole panel width to the chart and drops the ranked
+   list underneath it. Area is the encoding, so a 280px column made two thirds
+   of the cells too small to label -- which is the problem it exists to fix. */
+.breakdown.wide { grid-template-columns: minmax(0, 1fr); }
+.breakdown.wide .donut-wrap { width: 100%; justify-items: stretch; }
+.breakdown.wide .chart-modes { justify-self: center; }
 
 .donut-wrap { display: grid; gap: 0.9rem; justify-items: center; }
 
@@ -509,8 +515,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .chart-mode + .chart-mode { border-left: 1px solid var(--line-2); }
 .chart-mode.on { background: var(--panel); color: var(--ink); font-weight: 600; }
 
-.treemap { position: relative; }
-.treemap svg { display: block; }
+.treemap { position: relative; width: 100%; }
+.treemap svg { display: block; width: 100%; height: 100%; }
 /* The same dim-the-rest rule the ring uses, so the two shapes do not teach
    two different interaction languages. */
 .tm-cell, .tm-group { transition: opacity var(--dur-fast) var(--ease-out); }
@@ -521,7 +527,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .tm-group-label {
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  /* No tracking at 9px: it opens gaps inside words rather than separating
+     them ("Getting Around" read as "Getting A round"). */
+  letter-spacing: 0;
   fill: var(--ink-2);
   pointer-events: none;
 }
@@ -602,6 +610,10 @@ input, select, textarea { font: inherit; color: inherit; }
   border-color: var(--accent-line);
   overflow-y: auto;
 }
+/* Nothing in the panel may be compressed to make room: the box scrolls
+   instead. A flex column will happily shrink its last child into the one
+   above it, which is what clipped the final transaction row. */
+.lens > * { flex: none; }
 
 .lens-head { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.5rem; }
 .lens-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }

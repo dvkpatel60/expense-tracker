@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run typecheck && npm test && npm run build"
+    "verify": "npm run typecheck && npm test && npm run build",
+    "audit": "node scripts/audit.mjs"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.10",
@@ -37,6 +38,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "better-sqlite3": "^13.0.3",
     "happy-dom": "^20.13.2",
+    "playwright": "^1.62.1",
     "typescript": "^5.6.3",
     "vite": "^8.2.2",
     "vite-plugin-singlefile": "^2.3.3",

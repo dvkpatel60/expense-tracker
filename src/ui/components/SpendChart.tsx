@@ -81,10 +81,12 @@ export function SpendChart({
   const first = points[0]!;
   const last = points[points.length - 1]!;
 
-  // The constant-rate trajectory over the same span the chart draws. It is not
-  // the chord from start to end: velocity is per *calendar* day of the period,
-  // so a month where spending stopped on the 20th shows the reference running
-  // on past the flat tail, which is the point.
+  // The constant-rate trajectory over the same span the chart draws: had the
+  // period's total been spent evenly, this is the line it would have followed.
+  // Above it means front-loaded, below means back-loaded. It reads as a chord
+  // because velocity is the period total over the same calendar span — the two
+  // definitions have to agree or the reference is a line to nowhere, which is
+  // what happened when velocity counted only days that had a purchase.
   const days = (last.t - first.t) / DAY;
   const paceEnd = velocity && velocity > 0 ? velocity * days : 0;
 

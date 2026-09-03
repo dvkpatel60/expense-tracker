@@ -369,7 +369,7 @@ describe("richer KPIs (task-06)", () => {
     expect(avg).toBe(expected);
   });
 
-  it("spendingVelocity divides cash out by distinct calendar days", () => {
+  it("spendingVelocity divides cash out by the calendar days it spans", () => {
     let people: readonly Person[] = [];
     const txA: Transaction = { id: "tx:0", importHash: "h0", accountId: "acct:r", fi: "rbc",
       date: "2026-07-01", amount: cents(-10000), currency: "CAD", rawDescription: "a",
@@ -381,7 +381,11 @@ describe("richer KPIs (task-06)", () => {
       categorySource: "rule", kind: "purchase" };
     const state: LedgerState = { ...emptyLedger(), transactions: [txA, txB] };
     // 2 distinct days, 30000 in cash out -> 15000/day.
-    expect(spendingVelocity(state, "2026-07")).toBe(15000);
+    // Jul 1 to Jul 10 inclusive is ten calendar days, not the two that happen
+    // to carry a transaction: $300 over ten days is $30 a day. Dividing by
+    // active days gave $150 and made this identical to avgTransactionTotal.
+    expect(spendingVelocity(state, "2026-07")).toBe(3000);
+    expect(avgTransactionTotal(state, "2026-07")).toBe(15000);
   });
 
   it("settlementRate is the fraction of non-void claims that are settled", () => {

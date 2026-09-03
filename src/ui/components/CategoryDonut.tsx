@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { hierarchy, treemap, treemapSquarify } from "d3-hierarchy";
 import { arc, pie } from "d3-shape";
 import type { SpendGroup } from "../../core/ledger.js";
@@ -69,6 +69,8 @@ export function CategoryDonut({
   onDrill,
   onHover,
   onPin,
+  mode,
+  onMode,
   size = 220,
 }: {
   groups: readonly SpendGroup[];
@@ -77,9 +79,14 @@ export function CategoryDonut({
   onDrill(group: SpendGroup | null): void;
   onHover(target: LensTarget | null, anchor: DOMRect | null): void;
   onPin(target: LensTarget, anchor: DOMRect): void;
+  /** Owned by the panel: a treemap of twenty-one categories needs the panel's
+   *  full width to be worth switching to, and only the panel can give it that.
+   *  At the ring's 280px only a third of the cells were big enough to label,
+   *  which is the very problem the treemap exists to solve. */
+  mode: "ring" | "treemap";
+  onMode(mode: "ring" | "treemap"): void;
   size?: number;
 }) {
-  const [mode, setMode] = useState<"ring" | "treemap">("ring");
 
   const groupSlices = useMemo<Slice[]>(
     () =>
@@ -178,14 +185,14 @@ export function CategoryDonut({
         <button
           className={mode === "ring" ? "chart-mode on" : "chart-mode"}
           aria-pressed={mode === "ring"}
-          onClick={() => setMode("ring")}
+          onClick={() => onMode("ring")}
         >
           Ring
         </button>
         <button
           className={mode === "treemap" ? "chart-mode on" : "chart-mode"}
           aria-pressed={mode === "treemap"}
-          onClick={() => setMode("treemap")}
+          onClick={() => onMode("treemap")}
         >
           Treemap
         </button>
@@ -282,16 +289,28 @@ function SpendTreemap({
   onHover,
   onPin,
   onDrill,
-  width = 280,
-  height = 236,
 }: {
   groups: readonly SpendGroup[];
   onHover(target: LensTarget | null, anchor: DOMRect | null): void;
   onPin(target: LensTarget, anchor: DOMRect): void;
   onDrill(group: SpendGroup | null): void;
-  width?: number;
-  height?: number;
 }) {
+  // Measured rather than fixed: cell area is the whole encoding, so the number
+  // of categories that end up legible is a direct function of the room given.
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(560);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const measure = (): void => setWidth(Math.max(260, el.clientWidth || 560));
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const height = Math.round(Math.min(420, Math.max(240, width * 0.52)));
+
   const nodes = useMemo(() => {
     const root: TreeNode = {
       key: "root",
@@ -334,10 +353,10 @@ function SpendTreemap({
       .descendants();
   }, [groups, width, height]);
 
-  if (nodes.length <= 1) return null;
+  if (nodes.length <= 1) return <div className="treemap" ref={box} />;
 
   return (
-    <div className="treemap" style={{ width, height }}>
+    <div className="treemap" ref={box} style={{ height }}>
       <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true">
         {nodes
           .filter((n) => n.depth === 1)

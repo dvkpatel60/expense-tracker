@@ -216,18 +216,25 @@ export function CategoryLens({
 
   // Flip above the trigger when there is no room below, and keep the panel on
   // screen horizontally rather than letting it hang off the edge.
+  //
+  // The estimate decides *placement* only. It used to cap the height as well,
+  // and being an estimate it under-counted: the panel came out shorter than its
+  // content, and because the box is a flex column the last child was squeezed
+  // under the one above it rather than scrolling. The cap is the viewport now,
+  // which cannot be wrong about how much room there is.
   const width = 340;
-  const estimated = 168 + listed.length * 30 + merchants.length * 22;
-  const height = Math.min(estimated, Math.round(window.innerHeight * 0.7));
+  const estimated = 200 + listed.length * 32 + merchants.length * 24;
+  const ceiling = Math.round(window.innerHeight * 0.7);
+  const placed = Math.min(estimated, ceiling);
   const below = anchor.bottom + 8;
-  const top = below + height > window.innerHeight ? Math.max(8, anchor.top - height - 8) : below;
+  const top = below + placed > window.innerHeight ? Math.max(8, anchor.top - placed - 8) : below;
   const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
 
   return (
     <div
       ref={ref}
       className={pinned ? "lens pinned" : "lens"}
-      style={{ top, left, width, maxHeight: `${height}px` }}
+      style={{ top, left, width, maxHeight: `${ceiling}px` }}
       role={pinned ? "dialog" : "tooltip"}
       aria-label={`${target.label} breakdown`}
       {...(pinned ? { tabIndex: -1 } : { "aria-hidden": true })}

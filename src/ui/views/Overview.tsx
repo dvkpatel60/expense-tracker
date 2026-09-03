@@ -50,6 +50,8 @@ export function Overview({
   const top = period === null ? null : topCategoryDelta(L.ledger, period);
   const recurring = detectRecurring(L.ledger, period);
   const [drilled, setDrilled] = useState<SpendGroup | null>(null);
+  // The panel owns the shape, because the treemap needs the whole panel width.
+  const [shape, setShape] = useState<"ring" | "treemap">("ring");
   const [lens, setLens] = useState<{ target: LensTarget; anchor: DOMRect; pinned: boolean } | null>(
     null
   );
@@ -163,13 +165,15 @@ export function Overview({
             </p>
           </div>
 
-          <div className="breakdown">
+          <div className={shape === "treemap" ? "breakdown wide" : "breakdown"}>
             <CategoryDonut
               groups={tree}
               drilled={drilled}
               onDrill={setDrilled}
               onHover={showLens}
               onPin={pinLens}
+              mode={shape}
+              onMode={setShape}
             />
 
             <div className="breakdown-list">
