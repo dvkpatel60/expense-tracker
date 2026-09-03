@@ -92,6 +92,15 @@ describe("parsing the model's answer", () => {
     expect(coerceInsights(many)).toHaveLength(MAX_INSIGHTS);
   });
 
+  it("accepts and keeps the savings kind with its category", () => {
+    const out = coerceInsights([
+      { kind: "savings", text: "Friends owe you back ~$20 on groceries; split more often.", categoryId: "Groceries" },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.kind).toBe("savings");
+    expect(out[0]!.categoryId).toBe("Groceries");
+  });
+
   it("refuses anything that is not an array", () => {
     expect(() => parseInsights("{}")).toThrow();
     expect(() => parseInsights("")).toThrow();

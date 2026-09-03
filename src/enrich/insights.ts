@@ -105,7 +105,7 @@ Write at most ${MAX_INSIGHTS} insights. Respond with ONLY a JSON array, no pream
 
 Attach categoryId whenever an insight is about one category, so it can be linked to those transactions.
 Exactly one element must have kind "headline": the single most useful thing to know about this period, under 20 words.
-"trend" compares against the previous period. "anomaly" flags something unusual for one merchant or category. "habit" names a recurring pattern from the recurring list. "savings" points at a savings opportunity — a category where friends owe you back — and should suggest one concrete way to recover that money. "action" suggests one concrete, non-judgmental step.
+"trend" compares against the previous period. "anomaly" flags something unusual for one merchant or category. "habit" names a recurring pattern from the recurring list. "savings" points at a savings opportunity — a category where friends owe you back — and suggests one concrete, specific way to recover that money (split it more often, negotiate or switch a recurring provider, settle that outstanding claim). "action" suggests one concrete, non-judgmental step.
 Do not moralize, do not pad, and skip any kind you have nothing real to say for.`;
 }
 
