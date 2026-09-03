@@ -7,10 +7,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ ! -f .env ]; then
-  echo "No .env found. Creating one from .env.example."
+  echo "No .env found — created one from .env.example."
   cp .env.example .env
-  echo "  -> Fill in a key in .env, then run this again."
-  echo "     The app still runs without one; merchant identification is just disabled."
+  echo "Add a key to .env and restart to enable merchant identification."
+  echo "Starting anyway; everything else works without one."
   echo
 fi
 

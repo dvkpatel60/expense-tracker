@@ -7,6 +7,27 @@ Consolidates RBC, Scotiabank and Wealthsimple CSVs into one categorized ledger,
 tracks Interac e-transfers as people rather than merchants, and nets claims
 across rotating groups.
 
+## Quick start
+
+```
+npm install
+cp .env.example .env     # optional — fill in a key to enable merchant lookup
+npm run dev
+```
+
+Then open <http://localhost:5173> and press **Try it with sample data**.
+
+`npm run dev` runs `scripts/dev.sh`: it loads `.env`, prints which providers are
+configured, and starts Vite. A dev-only Vite plugin serves `/api/enrich` and
+`/api/providers` on the same port from the same function source Netlify bundles,
+so the one part of the app that talks to a provider is not the one part you can
+only test by deploying. Merchant lookups are cached in an in-memory SQLite table
+for the life of the process, because a dev session is dozens of reloads and each
+one would otherwise re-buy the same identifications.
+
+The `.env` step is optional. Without a key the app runs on its local rules and
+the provider picker says it is not configured; nothing else changes.
+
 ## Layout
 
 ```
@@ -87,20 +108,12 @@ body contains no dates or balances.
 
 ## Deploying to Netlify
 
-```
-git push -u origin main
-```
+The code is on GitHub at `dvkpatel60/expense-tracker` (branch `main`), so
+deploying is connecting that repo in Netlify and setting keys.
 
-The remote is already set to `https://github.com/dvkpatel60/expense-tracker`.
-Switch it to SSH with:
-
-```
-git remote set-url origin git@github.com:dvkpatel60/expense-tracker.git
-```
-
-Then connect the repo in Netlify. `netlify.toml` sets the build command,
-publish directory, Node version, cache headers and a content security policy;
-nothing needs configuring in the dashboard except one variable:
+`netlify.toml` already sets the build command, publish directory, Node version,
+cache headers and a content security policy, so nothing needs configuring in the
+dashboard except the environment variables:
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
@@ -113,13 +126,23 @@ exactly when it is configured. With none set the app still works: every local
 rule runs and merchant identification returns 503 with a message naming what to
 set.
 
-### Why there is a serverless function
+### Why there are serverless functions
 
-An API key cannot live in a browser bundle. `netlify/functions/enrich.mts`
-holds the key, and the client posts nothing but a list of merchant strings. The
-function re-validates that list before forwarding it: non-strings, oversized
-batches and anything starting with `etransfer:` are rejected, so the privacy
-boundary is enforced on the server rather than merely promised by the client.
+An API key cannot live in a browser bundle. `netlify/functions/enrich.mts` holds
+the keys, and the client posts nothing but a list of merchant strings and which
+provider to ask. The function re-validates that list before forwarding it:
+non-strings, oversized batches and anything starting with `etransfer:` are
+rejected, so the privacy boundary is enforced on the server rather than merely
+promised by the client. It also validates the requested model against the
+registry — the model arrives on a request body, and without that check the
+function would relay any model on the account.
+
+It normalizes the provider's response before replying, so provider envelopes
+never reach the browser and adding a provider changes nothing on the client.
+
+`netlify/functions/providers.mts` answers `/api/providers` with the catalogue
+and, for each provider, whether its key is set. That is what makes the picker
+dynamic. Env var *names* travel; values never do.
 
 The CSP sets `connect-src 'self'`, so even a compromised dependency could not
 exfiltrate to a third-party origin from the page.
@@ -131,25 +154,15 @@ exfiltrate to a third-party origin from the page.
   open from disk. No server behind it, so merchant lookup only works where
   something else supplies credentials.
 
-## Running it locally
-
-```
-cp .env.example .env    # then fill in whichever keys you have
-npm run dev
-```
-
-`npm run dev` runs `scripts/dev.sh`, which loads `.env`, prints which providers
-are configured and starts Vite. A dev-only Vite plugin serves `/api/enrich` and
-`/api/providers` from the same port using the same function source Netlify
-bundles — so the one part of the app that talks to a provider is not the one
-part you can only test by deploying. Lookups are cached in an in-memory SQLite
-table for the life of the process, because a dev session is dozens of reloads
-and each one would otherwise re-buy the same identifications.
-
 ## Commands
 
 ```
-npm run typecheck   # tsc --noEmit, strict + noUncheckedIndexedAccess
-npm test            # vitest
-npm run verify      # typecheck + test + build
+npm run dev           # app + /api on http://localhost:5173
+npm run dev:vite      # plain Vite, no /api routes
+npm test              # vitest — 152 tests
+npm run test:watch
+npm run typecheck     # tsc --noEmit, strict + noUncheckedIndexedAccess
+npm run verify        # typecheck + test + build
+npm run build         # Netlify target
+npm run build:singlefile
 ```
