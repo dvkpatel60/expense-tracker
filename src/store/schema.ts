@@ -1,6 +1,6 @@
 import type { LedgerState } from "../core/ledger.js";
 
-export const CURRENT_VERSION = 2;
+export const CURRENT_VERSION = 3;
 
 /** What actually goes to disk. Versioned from day one, because a stored blob
  *  with no version is a blob you can never change the shape of. */
@@ -17,7 +17,15 @@ export interface PersistedV2 {
   readonly ledger: LedgerState;
 }
 
-export type Persisted = PersistedV1 | PersistedV2;
+/** v3 adds Account.kind. The shape is otherwise identical to v2, so the
+ *  wrapper is the same and only the accounts inside it changed. */
+export interface PersistedV3 {
+  readonly version: 3;
+  readonly savedOn: string;
+  readonly ledger: LedgerState;
+}
+
+export type Persisted = PersistedV1 | PersistedV2 | PersistedV3;
 
 export function isPersisted(value: unknown): value is Persisted {
   return (

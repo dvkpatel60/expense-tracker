@@ -2,7 +2,7 @@ import { emptyLedger } from "../core/ledger.js";
 import type { LedgerState } from "../core/ledger.js";
 import { migrate } from "./migrations.js";
 import { CURRENT_VERSION, isPersisted } from "./schema.js";
-import type { PersistedV2 } from "./schema.js";
+import type { PersistedV3 } from "./schema.js";
 
 /** Storage is an interface so the core never imports a browser global and the
  *  tests never need a DOM. */
@@ -71,7 +71,7 @@ export async function load(store: KeyValueStore): Promise<LoadResult> {
 }
 
 export async function save(store: KeyValueStore, ledger: LedgerState): Promise<void> {
-  const payload: PersistedV2 = {
+  const payload: PersistedV3 = {
     version: CURRENT_VERSION,
     savedOn: new Date().toISOString().slice(0, 10),
     ledger,

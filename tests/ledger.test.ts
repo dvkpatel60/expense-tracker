@@ -14,9 +14,9 @@ const fixture = (n: string): string =>
   readFileSync(join(__dirname, "../src/parsers/__fixtures__", n), "utf8");
 
 const ACCOUNTS: Record<string, Account> = {
-  rbc: { id: "acct:rbc", label: "RBC Chequing", fi: "rbc" },
-  scotia: { id: "acct:scotia", label: "Scotia Visa", fi: "scotiabank" },
-  ws: { id: "acct:ws", label: "Wealthsimple Cash", fi: "wealthsimple" },
+  rbc: { id: "acct:rbc", label: "RBC Chequing", fi: "rbc", kind: "chequing" },
+  scotia: { id: "acct:scotia", label: "Scotia Visa", fi: "scotiabank", kind: "credit" },
+  ws: { id: "acct:ws", label: "Wealthsimple Cash", fi: "wealthsimple", kind: "chequing" },
 };
 
 function loadAll(): LedgerState {

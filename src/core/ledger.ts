@@ -177,6 +177,7 @@ export function importRows(
       categorySource: "rule",
       kind,
       ...(personId ? { personId } : {}),
+      ...(row.balance !== undefined ? { balanceAfter: row.balance } : {}),
       ...(row.originalAmount ? { originalAmount: row.originalAmount } : {}),
     });
   }

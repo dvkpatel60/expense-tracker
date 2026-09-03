@@ -50,9 +50,47 @@ describe("migration", () => {
       cache: { "BLUE DOOR COFFEE": { name: "Blue Door Coffee", category: "Coffee", note: "Cafe" } },
     };
     const { data, steps, lostData } = migrate(v1);
-    expect(steps).toEqual(["1 -> 2"]);
+    // Migrations compose: a v1 install upgrades all the way in one load.
+    expect(steps).toEqual(["1 -> 2", "2 -> 3"]);
     expect(lostData).toBe(true);
+    expect(data.version).toBe(3);
     expect(data.ledger.merchants["BLUE DOOR COFFEE"]?.name).toBe("Blue Door Coffee");
     expect(data.ledger.merchants["BLUE DOOR COFFEE"]?.categoryId).toBe("Coffee");
+  });
+
+  it("gives v2 accounts a kind inferred from their label", () => {
+    const v2 = {
+      version: 2 as const,
+      savedOn: "2026-08-01",
+      ledger: {
+        ...emptyLedger(),
+        accounts: [
+          { id: "a", label: "RBC Chequing", fi: "rbc" },
+          { id: "b", label: "Scotia Visa", fi: "scotiabank" },
+          { id: "c", label: "TFSA Savings", fi: "generic" },
+        ],
+      },
+    } as never;
+    const { data, steps, lostData } = migrate(v2);
+    expect(steps).toEqual(["2 -> 3"]);
+    // Nothing is discarded going to v3 — only a field is added.
+    expect(lostData).toBe(false);
+    expect(data.ledger.accounts.map((a) => a.kind)).toEqual([
+      "chequing",
+      "credit",
+      "savings",
+    ]);
+  });
+
+  it("keeps a kind a v2 install somehow already had", () => {
+    const v2 = {
+      version: 2 as const,
+      savedOn: "2026-08-01",
+      ledger: {
+        ...emptyLedger(),
+        accounts: [{ id: "a", label: "Everyday Visa", fi: "rbc", kind: "savings" }],
+      },
+    } as never;
+    expect(migrate(v2).data.ledger.accounts[0]?.kind).toBe("savings");
   });
 });

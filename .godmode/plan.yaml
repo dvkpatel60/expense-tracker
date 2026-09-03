@@ -1,0 +1,493 @@
+# Pattern: Pipeline
+# Phase 1 (data integrity) -> Phase 2 (polish existing) -> Phase 3 (AI enhancement) -> Phase 4 (data management)
+# Max parallelism: 3 tasks per round within a phase
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 1: Data Integrity Fixes (BLOCKING — no other work proceeds until green)
+# ──────────────────────────────────────────────────────────────────────
+
+- id: "task-01"
+  title: "Investigate and fix provider-as-merchant data corruption"
+  skill: "fix"
+  files:
+    - src/enrich/facts.ts
+    - src/core/normalize.ts
+    - tests/enrich.test.ts
+  depends_on: []
+  agent: true
+  test: "npx vitest run tests/enrich.test.ts"
+  done_when: "npx vitest run tests/enrich.test.ts | grep -q 'Tests.*passed'"
+  notes: |
+    The enrichment prompt asks the model to identify merchants from normalized
+    strings. If the model returns provider names (Anthropic, Gemini) as merchant
+    names, those pollute the cache and display. Fix requires:
+    1. Add RESERVED_MERCHANTS set in facts.ts with provider/model names
+    2. Filter in collect() — skip facts whose name matches a reserved entry
+    3. Add regression test: parseFacts with "Anthropic" in response -> filtered
+    4. Also filter in enricher.ts redactForLookup for safety
+
+- id: "task-02"
+  title: "Add provider-name blocklist to enrichment prompt"
+  skill: "fix"
+  files:
+    - src/enrich/prompt.ts
+    - tests/enrich.test.ts
+  depends_on: ["task-01"]
+  agent: true
+  test: "npx vitest run tests/enrich.test.ts"
+  done_when: "npx vitest run tests/enrich.test.ts | grep -q 'Tests.*passed'"
+  notes: |
+    Strengthen the prompt itself to tell the model not to return provider/platform
+    names as merchant names. Add: "Never return provider names (Anthropic, Gemini,
+    Google, OpenAI, etc.) as merchant names — these are the AI services, not
+    merchants." This is belt-and-suspenders with task-01's filter.
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 2: Un-orphan & Polish Existing Features (parallel after Phase 1)
+# ──────────────────────────────────────────────────────────────────────
+
+- id: "task-03"
+  title: "Wire Accounts view into App.tsx navigation"
+  skill: "build"
+  files:
+    - src/ui/App.tsx
+    - src/ui/views/Accounts.tsx
+  depends_on: ["task-01"]
+  agent: true
+  test: "npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    Accounts.tsx is fully implemented (BalanceSheetPanel, AccountCard, credit
+    utilisation bars) but not rendered by App.tsx. Steps:
+    1. Import Accounts in App.tsx
+    2. Add "accounts" to View union type
+    3. Add nav entry with IconAccounts (build an asset/credit icon)
+    4. Add to TITLES record
+    5. Render <Accounts L={L} period={period} /> when view === "accounts"
+    6. Pass period prop (accounts already accepts it)
+    7. Update subtitle logic for accounts view
+
+- id: "task-04"
+  title: "Add account editing (label, kind, credit limit, opening balance)"
+  skill: "build"
+  files:
+    - src/core/ledger.ts
+    - src/core/types.ts
+    - src/ui/views/Accounts.tsx
+    - tests/ledger.test.ts
+  depends_on: ["task-03"]
+  agent: true
+  test: "npx vitest run tests/ledger.test.ts"
+  done_when: "npx vitest run tests/ledger.test.ts | grep -q 'Tests.*passed'"
+  notes: |
+    1. Add editAccount(state, accountId, patch) transition in ledger.ts
+       - patch: { label?, kind?, creditLimit?, openingBalance? }
+       - Returns new state with updated account
+       - Bump CURRENT_VERSION in store/schema.ts only if shape changes
+    2. Add useLedger callback: editAccount(id, patch)
+    3. In Accounts.tsx AccountCard: add edit button -> inline form
+       - Label: text input
+       - Kind: select dropdown
+       - Credit limit: dollar input (credit accounts only)
+       - Opening balance: dollar input
+    4. Tests: editAccount transitions, round-trip through store
+
+- id: "task-05"
+  title: "Expose all 4 split strategies in the TransactionSheet UI"
+  skill: "build"
+  files:
+    - src/ui/components/TransactionSheet.tsx
+  depends_on: ["task-01"]
+  agent: true
+  test: "npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    The SplitSpec type supports even/percent/amounts/itemized but the UI only
+    exposes "even". Steps:
+    1. Add strategy selector: tabs or segmented control (Even | Percent | Amounts | Itemized)
+    2. Even: current behavior (participant buttons + include me)
+    3. Percent: slider/input per selected participant, myPercent auto-calculated
+    4. Amounts: dollar input per selected participant, remainder = mine
+    5. Itemized: list of items, each with label, amount, participant checkboxes
+    6. Preview shows per-person amounts for all strategies
+    7. "Split evenly" button becomes "Apply split" for all strategies
+    8. Keep existing even-split as default strategy
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 3: Enhanced KPIs & Activity Summaries (parallel after Phase 2)
+# ──────────────────────────────────────────────────────────────────────
+
+- id: "task-06"
+  title: "Add richer KPIs and period-over-period activity summaries"
+  skill: "build"
+  files:
+    - src/core/ledger.ts
+    - src/ui/views/Overview.tsx
+    - src/ui/views/Activity.tsx
+  depends_on: ["task-03"]
+  agent: true
+  test: "npx vitest run tests/ledger.test.ts && npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/ledger.test.ts && npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    Current KPIs: Your spend, Cash out, Recovered. Add:
+    1. In ledger.ts: add reporting functions
+       - avgTransactionTotal(state, period): average transaction size
+       - spendingVelocity(state, period): daily spend rate
+       - topCategoryDelta(state, period): biggest category increase vs prior
+       - settlementRate(state): % of claims that are settled
+    2. In Overview.tsx: add KPI cards
+       - Avg transaction (with prior comparison)
+       - Spending velocity ($/day)
+       - Settlement rate (%)
+    3. In Activity.tsx: add summary bar at top
+       - Period total, transaction count, avg size
+       - Top category breakdown (mini bar chart)
+       - "X% of your spend was split with others"
+    4. Tests: each new reporting function gets unit tests
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 4: AI Enhancement (parallel after Phase 2, after Phase 3 for richer digest)
+# ──────────────────────────────────────────────────────────────────────
+
+- id: "task-07"
+  title: "Add recurring transaction detection (pure core computation)"
+  skill: "build"
+  files:
+    - src/core/ledger.ts
+    - src/core/recurring.ts
+    - tests/ledger.test.ts
+  depends_on: ["task-01"]
+  agent: true
+  test: "npx vitest run tests/ledger.test.ts"
+  done_when: "npx vitest run tests/ledger.test.ts | grep -q 'Tests.*passed'"
+  notes: |
+    Recurring detection is pure computation, no AI needed. Steps:
+    1. Create src/core/recurring.ts with detectRecurring(state, period)
+       - Group transactions by merchantKey
+       - For each merchant with 3+ transactions:
+         - Calculate median interval between transactions
+         - Flag if interval is 28-35 days (monthly) or 6-8 days (weekly)
+         - Return: { merchantKey, merchantName, avgAmount, frequency, nextExpected }
+    2. Add to LedgerState or compute on-the-fly (compute is fine, not cached)
+    3. Surface in Overview.tsx attention items section
+    4. Surface in Activity.tsx as a "Recurring" filter/chip
+    5. Tests: detectRecurring with known patterns, edge cases (irregular intervals)
+
+- id: "task-08"
+  title: "Expand InsightsDigest for richer AI analysis"
+  skill: "build"
+  files:
+    - src/core/digest.ts
+    - src/enrich/insights.ts
+    - src/enrich/insights.ts (validateDigest)
+    - tests/digest.test.ts
+  depends_on: ["task-06", "task-07"]
+  agent: true
+  test: "npx vitest run tests/digest.test.ts"
+  done_when: "npx vitest run tests/digest.test.ts | grep -q 'Tests.*passed'"
+  notes: |
+    Widen InsightsDigest to include computed signals that never cross the network:
+    1. In digest.ts: add to InsightsDigest
+       - recurringCandidates: { merchant, avgAmount, frequency }[]
+       - savingsOpportunity: { categoryId, yourShare, cashOut, potentialSavings }[]
+         (potentialSavings = yourShare - cashOut when yourShare > cashOut, i.e.
+         you're paying more than your fair share in a category)
+       - topMerchantDelta: { merchant, currentShare, previousShare }[]
+         (only when previous period exists)
+    2. In insights.ts: update buildInsightsPrompt to include new fields
+    3. In validateDigest: validate new fields (bounded arrays, no sensitive data)
+    4. Update insight kinds: add "savings" kind for optimization tips
+    5. Tests: digest.test.ts — assert no person names, dates, balances in new fields
+    6. Privacy: new fields are pure aggregates, no individual transactions
+
+- id: "task-09"
+  title: "Add savings tips / optimization insights to AI analysis"
+  skill: "build"
+  files:
+    - src/enrich/insights.ts
+    - src/ui/components/InsightsPanel.tsx
+    - tests/insights.test.ts
+  depends_on: ["task-08"]
+  agent: true
+  test: "npx vitest run tests/insights.test.ts"
+  done_when: "npx vitest run tests/insights.test.ts | grep -q 'Tests.*passed'"
+  notes: |
+    1. In buildInsightsPrompt: add section about savings opportunities
+       - "Identify categories where own spend significantly exceeds cash out,
+         suggesting you're paying more than your fair share. Suggest specific
+         actions: split more often, negotiate recurring costs, switch providers."
+    2. In parseInsights/coerceInsights: accept "savings" kind
+    3. In InsightsPanel.tsx: render "savings" kind with a distinct icon/color
+       - Link to Activity filtered to that category
+       - Show the specific dollar amount of potential savings
+    4. In tests/insights.test.ts: test savings kind parsing and rendering
+    5. Privacy: savings tips are derived from aggregates, no individual tx data
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 5: Data Management (parallel after Phase 2)
+# ──────────────────────────────────────────────────────────────────────
+
+- id: "task-10"
+  title: "Add CSV/data export functionality"
+  skill: "build"
+  files:
+    - src/core/ledger.ts
+    - src/ui/views/ImportView.tsx
+    - tests/ledger.test.ts
+  depends_on: ["task-03"]
+  agent: true
+  test: "npx vitest run tests/ledger.test.ts"
+  done_when: "npx vitest run tests/ledger.test.ts | grep -q 'Tests.*passed'"
+  notes: |
+    1. In ledger.ts: add exportCsv(state, options)
+       - Options: { period?, accountId?, format: "full" | "summary" }
+       - Full: all transaction fields as CSV columns
+       - Summary: date, merchant, category, amount, your share, people involved
+       - Returns string (CSV content)
+    2. In useLedger: add exportData callback
+    3. In ImportView.tsx: add "Export" section below account list
+       - Period selector (all / current month / custom range)
+       - Account selector (all / specific)
+       - Format selector (full / summary)
+       - Download button -> triggers browser download
+    4. Tests: exportCsv with known state, verify CSV structure
+
+- id: "task-11"
+  title: "Add person merge/unmerge UI"
+  skill: "build"
+  files:
+    - src/core/ledger.ts
+    - src/ui/views/People.tsx
+    - tests/ledger.test.ts
+  depends_on: ["task-03"]
+  agent: true
+  test: "npx vitest run tests/ledger.test.ts"
+  done_when: "npx vitest run tests/ledger.test.ts | grep -q 'Tests.*passed'"
+  notes: |
+    Person.aliases is modeled but has no UI operation. Steps:
+    1. In ledger.ts: add mergePeople(state, keepId, mergeId, clock)
+       - Move all transactions, claims, settlements from mergeId to keepId
+       - Merge aliases arrays (deduplicated)
+       - Remove the merged person
+       - Return new state
+    2. In ledger.ts: add unmergePerson(state, personId, alias, clock)
+       - Split one alias back into its own Person
+       - Move matching transactions to new person
+       - Return new state
+    3. In People.tsx: add merge button on person card
+       - Shows dropdown of other people to merge with
+       - Confirmation dialog: "Merge X into Y? All transactions will be re-assigned."
+    4. In People.tsx: add unmerge option in person detail
+       - Shows list of aliases, each with "Split into own person" button
+     5. Tests: mergePeople, unmergePerson transitions
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 6: Frontend / AI-copilot redesign (parallel after Phase 2, AI tasks after Phase 4)
+# Objective from the audit: overhaul charts for micro-categories nested under
+# macro-categories, upgrade the lens and hover, and turn the Analysis rail into
+# a copilot with predefined workflows, category/transaction context, prompt
+# controls and model management.
+# ──────────────────────────────────────────────────────────────────────
+
+- id: "task-12"
+  title: "Extract a shared BudgetTotals/grouped-spend computation used by donut, list and lens"
+  skill: "refactor"
+  files:
+    - src/core/ledger.ts
+    - src/ui/components/CategoryDonut.tsx
+    - src/ui/components/CategoryLens.tsx
+    - src/ui/views/Overview.tsx
+    - tests/ledger.test.ts
+  depends_on: ["task-03"]
+  agent: true
+  test: "npx vitest run tests/ledger.test.ts && npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/ledger.test.ts && npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    Today the donut computes its slices from GroupTotal/CategoryTotal, the ranked
+    category list re-totals independently, and the lens re-derives transactions.
+    Add one pure helper in core (e.g. buildSpendTree(state, period)) that returns
+    a nested tree: group -> category -> {yourShare, cashOut, count, merchantTotals},
+    so donut, ranked list, and lens all read the same derived value. This removes
+    the risk that the ring and the list drift (a real failure mode the app guards
+    against elsewhere via derived-only groupTotals). No behavioural change — pure
+    refactor; the tests pin the existing numbers.
+
+- id: "task-13"
+  title: "Overhaul CategoryDonut with macro->micro nesting and smooth transitions"
+  skill: "build"
+  files:
+    - src/ui/components/CategoryDonut.tsx
+    - src/ui/tokens.css
+    - src/ui/views/Overview.tsx
+    - tests/app.test.tsx
+  depends_on: ["task-12"]
+  agent: true
+  test: "npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    Problem from audit: the ring shows only 6 groups; micro-categories are only
+    reachable by a drill-in that many users never discover, and a 6-slice ring
+    with a ranked list beside it is two ways of showing the same top level.
+    Redesign:
+    1. Keep the ring at group level, but add an animated drill: clicking a group
+       (or its key row) smooths the arcs from group angles to that group's
+       category angles (d3-shape arc with interpolated corners or a transition
+       on the same layout function). The centre total becomes the drilled
+       group's total, and the back <button> returns.
+    2. Add a nested treemap/sunburst alternative toggle ("Ring | Treemap") that
+       shows all 21 categories as nested rectangles inside their group's colour
+       family (shades of the same hue — the existing --cat-* vs --grp-* token
+       scheme does exactly this). This is the fix for the micro-categories-
+       unreadable-at-a-glance complaint.
+    3. Hover a slice -> highlight + the CategoryLens for that category/group.
+    4. Keep aria-hidden on the SVG; the ranked list remains the accessible text.
+    Verify with the screenshot script that a drilled ring and the treemap render
+    without clipping (the lens/scrim pointer-interception bugs also get fixed here
+    by making the lens non-blocking for hover, see task-14).
+
+- id: "task-14"
+  title: "Upgrade CategoryLens: sticky, larger, context-aware, keyboard-accessible"
+  skill: "build"
+  files:
+    - src/ui/components/CategoryLens.tsx
+    - src/ui/tokens.css
+    - tests/app.test.tsx
+  depends_on: ["task-12"]
+  agent: true
+  test: "npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    Audit findings: the lens is pointer-events:none by design so it can't hold
+    its own hover, it only lists the first 5 transactions with a pager, and a
+    `.scrim`/`.lens` pointer-interception bug blocked scripted clicks (Playwright
+    TimeoutError). Improvements:
+    1. Make the lens richer: show the category's group, yourShare vs cashOut,
+       a mini proportion bar, count, and top merchants — not just a raw tx list.
+    2. Make it sticky relative to the hovered row (clamp to viewport) and keep
+       pointer-events:none so it never swallows the mouse-out that closes it —
+       but add a real click-to-pin mode (click the row -> pinned, interactive
+       lens with scroll + full list; Escape or click-away unpins).
+    3. Accept keyboard focus: focus the row -> lens opens; tab to it and arrow
+       through the tx list. Make the lens itself part of the tab order only when
+       pinned (so it doesn't trap focus).
+    4. Fix the pointer-interception bug at the source so Playwright/screenshot
+       automation and real users can click through after a lens is open.
+    5. Mobile: the lens currently hides under 720px — implement a bottom-sheet
+       fallback instead of hiding (see task-13 treemap which carries the info).
+
+- id: "task-15"
+  title: "Turn Analysis rail into an AI copilot with predefined workflows"
+  skill: "build"
+  files:
+    - src/ui/components/InsightsPanel.tsx
+    - src/ui/components/CopilotPanel.tsx
+    - src/ui/hooks/useCopilot.ts
+    - src/ui/views/Overview.tsx
+    - tests/app.test.tsx
+  depends_on: ["task-08"]
+  agent: true
+  test: "npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    The Analysis rail today is a read-only list of typed insights
+    (InsightsPanel/insights.ts). Turn it into a copilot while keeping the
+    existing insight cards as one workflow. Design:
+    1. Predefined workflows (buttons, not free chat): "Explain this period",
+       "Find savings", "Spot anomalies", "Compare to last period",
+       "Summarize category" / "Summarize this transaction".
+    2. Context passing: when a category is selected (or a transaction is open in
+       the sheet), a "Analyze with AI" action sends a focused digest — the same
+       privacy-shaped aggregates from core/digest.ts but scoped (that category's
+       totals + top merchants, or that one transaction's fields).
+    3. A prompt-control row: temperature + "conservative/balanced/creative"
+       tone selector, model picker from /api/providers, and a token budget
+       label — surfaced as a compact settings strip, not buried.
+    4. The response is streamed in as structured Insights (reuse the insight-kind
+       renderer) plus an optional short paragraph. Keep an explicit "Privacy:
+       only category totals leave this device" note.
+    5. Persist nothing that isn't already persisted. No chat history stored.
+    Tests bootstrap with the stubbed fetch (tests/setup.ts returns no providers)
+    so the panel renders the no-provider state; a stub provider test exercises a
+    workflow end to end.
+
+- id: "task-16"
+  title: "Add model management + provider status UI wired to /api/providers"
+  skill: "build"
+  files:
+    - src/ui/components/ModelPicker.tsx
+    - src/ui/components/CopilotPanel.tsx
+    - src/ui/App.tsx
+    - tests/app.test.tsx
+  depends_on: ["task-15"]
+  agent: true
+  test: "npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    /api/providers already returns provider env-var names and whether a key is
+    present (never the value). Build a small model manager in the copilot:
+    1. A provider/model selector listing the validated catalogue (resolveModel).
+    2. Status row per provider: key present/absent + model list
+       (disabled if no key). Click to set as active.
+    3. The active choice flows to the workflow requests (VITE_ENRICH_MODE proxy
+       vs direct still respected).
+    4. No key -> workflows stay in the no-provider state with the existing 503
+       message naming what to set; nothing breaks.
+    Bootstrap renders from the stubbed empty /api/providers in tests/setup.ts.
+
+- id: "task-17"
+  title: "SpendChart + Overview KPI upgrades (tooltips, avg line, split band)"
+  skill: "build"
+  files:
+    - src/ui/components/SpendChart.tsx
+    - src/ui/views/Overview.tsx
+    - src/ui/tokens.css
+    - tests/ledger.test.ts
+  depends_on: ["task-03"]
+  agent: true
+  test: "npx vitest run tests/ledger.test.ts && npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/ledger.test.ts && npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    SpendChart is a fixed-width 700 SVG area (cash vs your share) with no
+    interaction. Upgrades:
+    1. Add a hover crosshair + tooltip showing date, cash out, your share, and
+       the gap, using the existing real-text labels (keep SVG text, not foreign
+       images).
+    2. Add a dashed "average daily spend" reference line computed in core (the
+       spendingVelocity metric from task-06), so the chart answers "am I above
+       or below my running average" at a glance.
+    3. Keep the filled band (other people's share) — it is the whole point of
+       the product — but label it with the running recovered total on hover.
+    4. Make width responsive (measure container, not hard 700) so it matches the
+       treemap/ring from task-13 on the same panel width.
+    The legend and token colours stay; tests pin the generated points.
+
+- id: "task-18"
+  title: "AI-first page polish pass using the audit screenshots"
+  skill: "build"
+  files:
+    - src/ui/views/Overview.tsx
+    - src/ui/views/Activity.tsx
+    - src/ui/views/People.tsx
+    - src/ui/views/ImportView.tsx
+    - src/ui/tokens.css
+    - tests/app.test.tsx
+  depends_on: ["task-13", "task-15"]
+  agent: true
+  test: "npx vitest run tests/app.test.tsx"
+  done_when: "npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed'"
+  notes: |
+    Audit-driven, per-page polish (assumes back-end tasks are green):
+    1. Overview: KPI strip gains Avg transaction + Spending velocity (from
+       task-06); add a "Copilot" call-to-action on the empty no-provider state
+       naming exact env vars; ensure the ranked list and treemap agree.
+    2. Activity: the facet bar has 23 chips across two crowded rows — group them
+       ("Status" vs "Category") and move Categories into a compact scrollable
+       chip row; add a top summary bar (period total, avg size, % split with
+       others) from task-06.
+    3. People: net balances are good; add a merge/unmerge affordance only after
+       task-11 lands (guard the UI on the transition existing).
+    4. Import: the dropzone is bare — add per-institution hint text, a 3-step
+       "detect -> map -> split" strip, and surface reject reasons as a collapsible
+       list (the parsers already return them; ImportView just doesn't show them).
+    Each change is verified by re-running the screenshot audit script to confirm
+    no clipping, no pointer-interception regressions, and the new elements render.

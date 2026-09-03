@@ -13,7 +13,7 @@ function seeded(): LedgerState {
     state = importRows(
       state,
       parsed.rows,
-      { id: `acct:${s.label}`, label: s.label, fi: s.fi },
+      { id: `acct:${s.label}`, label: s.label, fi: s.fi, kind: s.kind },
       clock
     ).state;
   }

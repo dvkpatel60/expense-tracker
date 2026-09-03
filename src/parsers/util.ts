@@ -52,6 +52,7 @@ export interface RowDraft {
   typeHint?: string;
   accountHint?: string;
   chequeNumber?: string;
+  balance?: Cents | null;
   originalAmount?: { amount: Cents; currency: string };
 }
 
@@ -82,6 +83,7 @@ export function buildRow(
     ...(draft.typeHint ? { typeHint: draft.typeHint } : {}),
     ...(draft.accountHint ? { accountHint: draft.accountHint } : {}),
     ...(draft.chequeNumber ? { chequeNumber: draft.chequeNumber } : {}),
+    ...(draft.balance !== null && draft.balance !== undefined ? { balance: draft.balance } : {}),
     ...(draft.originalAmount ? { originalAmount: draft.originalAmount } : {}),
   };
 }

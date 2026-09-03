@@ -1,6 +1,7 @@
+import { inferAccountKind } from "../core/accounts.js";
 import { emptyLedger } from "../core/ledger.js";
 import { CURRENT_VERSION } from "./schema.js";
-import type { Persisted, PersistedV2 } from "./schema.js";
+import type { Persisted, PersistedV3 } from "./schema.js";
 
 type Migration = (input: any) => any;
 
@@ -33,10 +34,25 @@ const MIGRATIONS: Record<number, Migration> = {
       ),
     },
   }),
+
+  // Accounts predate the chequing/savings/credit distinction. The kind is
+  // inferred from the label, which is a guess — but a stored guess the user can
+  // correct beats refusing to load, and only net-worth rollups depend on it.
+  2: (v2) => ({
+    version: 3,
+    savedOn: new Date().toISOString().slice(0, 10),
+    ledger: {
+      ...v2.ledger,
+      accounts: (v2.ledger?.accounts ?? []).map((a: any) => ({
+        ...a,
+        kind: a.kind ?? inferAccountKind(String(a.label ?? ""), a.fi),
+      })),
+    },
+  }),
 };
 
 export interface MigrationResult {
-  readonly data: PersistedV2;
+  readonly data: PersistedV3;
   readonly steps: readonly string[];
   readonly lostData: boolean;
 }
@@ -61,5 +77,5 @@ export function migrate(input: Persisted): MigrationResult {
       `Saved data is version ${current.version} but this build understands ${CURRENT_VERSION}. Upgrade before loading.`
     );
   }
-  return { data: current as PersistedV2, steps, lostData };
+  return { data: current as PersistedV3, steps, lostData };
 }

@@ -25,6 +25,7 @@ export const genericParser: Parser = {
     const debitCol = findColumn(fields, "debit", "withdrawal");
     const creditCol = findColumn(fields, "credit", "deposit");
     const descCol = findColumn(fields, "desc", "merchant", "narrative", "detail", "payee");
+    const balanceCol = findColumn(fields, "balance");
 
     if (!dateCol) {
       return {
@@ -49,6 +50,7 @@ export const genericParser: Parser = {
           date: r[dateCol],
           amount,
           descriptionParts: [descCol ? r[descCol] : ""],
+          balance: balanceCol ? parseAmount(r[balanceCol]) : null,
         },
         i + 2,
         resolved,

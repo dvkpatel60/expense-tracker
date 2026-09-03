@@ -1,4 +1,6 @@
 import { useRef, useState } from "react";
+import { ACCOUNT_KINDS, ACCOUNT_KIND_LABEL, inferAccountKind } from "../../core/accounts.js";
+import type { AccountKind } from "../../core/types.js";
 import { detectParser } from "../../parsers/index.js";
 import { SAMPLES } from "../samples.js";
 import type { UseLedger } from "../useLedger.js";
@@ -6,10 +8,14 @@ import type { UseLedger } from "../useLedger.js";
 export function ImportView({ L }: { L: UseLedger }) {
   const [text, setText] = useState("");
   const [label, setLabel] = useState("");
+  const [kind, setKind] = useState<AccountKind | null>(null);
   const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const detected = text.trim() ? detectParser(text) : null;
+  // Inferred from the name until the user says otherwise. Getting this wrong
+  // inverts every net-worth figure, so it is shown rather than assumed.
+  const effectiveKind = kind ?? inferAccountKind(label, detected?.parser.id ?? "generic");
 
   function readFile(file: File) {
     if (!label) setLabel(file.name.replace(/\.csv$/i, ""));
@@ -75,14 +81,31 @@ export function ImportView({ L }: { L: UseLedger }) {
           onChange={(e) => setLabel(e.target.value)}
         />
 
+        <div>
+          <div className="field-label">Account type</div>
+          <select
+            className="select"
+            aria-label="Account type"
+            value={effectiveKind}
+            onChange={(e) => setKind(e.target.value as AccountKind)}
+          >
+            {ACCOUNT_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {ACCOUNT_KIND_LABEL[k]}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="btn-stack" style={{ marginTop: 0 }}>
           <button
             className="btn"
             disabled={!text.trim() || !label.trim()}
             onClick={() => {
-              if (L.importText(text, label.trim())) {
+              if (L.importText(text, label.trim(), effectiveKind)) {
                 setText("");
                 setLabel("");
+                setKind(null);
               }
             }}
           >

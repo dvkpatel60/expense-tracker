@@ -32,6 +32,9 @@ export interface RawRow {
   readonly typeHint?: string;
   readonly accountHint?: string;
   readonly chequeNumber?: string;
+  /** Running account balance after this row, where the export states one.
+   *  Optional because plenty of exports (card statements especially) do not. */
+  readonly balance?: Cents;
   /** Set when the row settled in a currency other than the posted one. */
   readonly originalAmount?: { amount: Cents; currency: string };
 }
@@ -64,10 +67,19 @@ export type TransactionKind =
 
 export type Provenance = "default" | "rule" | "enriched" | "user";
 
+/** Chequing, savings and cash are assets; credit is a liability, and its
+ *  balance counts against net worth rather than towards it. */
+export type AccountKind = "chequing" | "savings" | "credit" | "cash";
+
 export interface Account {
   readonly id: AccountId;
   readonly label: string;
   readonly fi: FiId;
+  readonly kind: AccountKind;
+  /** Where the statement's balance column starts, when it has none. */
+  readonly openingBalance?: Cents;
+  /** Credit accounts only; enables a utilisation figure. */
+  readonly creditLimit?: Cents;
 }
 
 export interface Person {
@@ -98,6 +110,10 @@ export interface Transaction {
   readonly kind: TransactionKind;
   readonly personId?: PersonId;
   readonly transferPairId?: string;
+  /** Balance the statement reported after this row. Carried, never computed —
+   *  it is evidence from the bank, which is what makes it worth checking
+   *  against (see core/anomalies.ts). */
+  readonly balanceAfter?: Cents;
   readonly originalAmount?: { amount: Cents; currency: string };
 }
 

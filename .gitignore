@@ -27,3 +27,6 @@ Thumbs.db
 npm-debug.log*
 yarn-error.log*
 *.log
+
+# Personal bank exports / scratch test imports — never commit real financial data
+*.csv

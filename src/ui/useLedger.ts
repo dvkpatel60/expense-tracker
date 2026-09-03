@@ -26,6 +26,7 @@ import { loadSettings, reconcile as reconcileSettings, saveSettings } from "./se
 import type { EnrichmentSettings } from "./settings.js";
 import type {
   Account,
+  AccountKind,
   CategoryId,
   FiId,
   SplitSpec,
@@ -46,8 +47,10 @@ export interface UseLedger {
   enrichment: EnrichmentSettings | null;
   chooseProvider(provider: string): void;
   chooseModel(model: string): void;
-  importText(text: string, label: string, fi?: FiId): ImportReport | null;
-  loadSamples(samples: readonly { label: string; fi: FiId; text: string }[]): void;
+  importText(text: string, label: string, kind: AccountKind, fi?: FiId): ImportReport | null;
+  loadSamples(
+    samples: readonly { label: string; fi: FiId; kind: AccountKind; text: string }[]
+  ): void;
   recategorize(id: TransactionId, category: CategoryId, applyToMerchant: boolean): void;
   split(id: TransactionId, spec: SplitSpec): void;
   unsplit(id: TransactionId): void;
@@ -121,7 +124,7 @@ export function useLedger(): UseLedger {
   }, [ledger, ready]);
 
   const importText = useCallback(
-    (text: string, label: string, fi?: FiId): ImportReport | null => {
+    (text: string, label: string, kind: AccountKind, fi?: FiId): ImportReport | null => {
       const parsed = fi ? parseStatement(text, fi) : parseStatement(text);
       if (parsed.rows.length === 0) {
         setStatus(
@@ -130,7 +133,7 @@ export function useLedger(): UseLedger {
         );
         return null;
       }
-      const account: Account = { id: `acct:${label}`, label, fi: parsed.fi };
+      const account: Account = { id: `acct:${label}`, label, fi: parsed.fi, kind };
       const result = importRows(ledger, parsed.rows, account, clock);
       setLedger(result.state);
 
@@ -150,12 +153,12 @@ export function useLedger(): UseLedger {
   );
 
   const loadSamples = useCallback(
-    (samples: readonly { label: string; fi: FiId; text: string }[]) => {
+    (samples: readonly { label: string; fi: FiId; kind: AccountKind; text: string }[]) => {
       let next = emptyLedger();
       let rows = 0;
       for (const s of samples) {
         const parsed = parseStatement(s.text, s.fi);
-        const account: Account = { id: `acct:${s.label}`, label: s.label, fi: s.fi };
+        const account: Account = { id: `acct:${s.label}`, label: s.label, fi: s.fi, kind: s.kind };
         const r = importRows(next, parsed.rows, account, clock);
         next = r.state;
         rows += r.report.imported;
