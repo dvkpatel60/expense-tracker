@@ -1,0 +1,474 @@
+import { abs, cents, sum, ZERO } from "./money.js";
+import type { Cents } from "./money.js";
+import { BUILTIN_RULES, categorize } from "./categorize.js";
+import { parseETransfer } from "./etransfer.js";
+import { normalizeMerchant } from "./normalize.js";
+import { observePerson, titleCase } from "./people.js";
+import { pairInternalTransfers } from "./pairing.js";
+import { computeSplit, effectiveAmount, netPosition, proposeSettlement } from "./split.js";
+import type {
+  Account,
+  CategoryId,
+  CategoryRule,
+  Claim,
+  ISODate,
+  MerchantFacts,
+  Person,
+  RawRow,
+  Settlement,
+  SplitSpec,
+  Transaction,
+  TransactionId,
+  TransactionKind,
+} from "./types.js";
+
+/**
+ * The whole domain as one immutable value plus pure transitions over it.
+ *
+ * Nothing here touches storage, the network or React. That is what makes the
+ * pipeline testable end to end, and it is why the first prototype had to be
+ * sliced apart with a script to be tested at all.
+ */
+export interface LedgerState {
+  readonly accounts: readonly Account[];
+  readonly transactions: readonly Transaction[];
+  readonly people: readonly Person[];
+  readonly claims: readonly Claim[];
+  readonly settlements: readonly Settlement[];
+  readonly rules: readonly CategoryRule[];
+  readonly merchants: Readonly<Record<string, MerchantFacts>>;
+}
+
+export const emptyLedger = (): LedgerState => ({
+  accounts: [],
+  transactions: [],
+  people: [],
+  claims: [],
+  settlements: [],
+  rules: BUILTIN_RULES,
+  merchants: {},
+});
+
+/** Injected so tests are deterministic and ids are reproducible. */
+export interface Clock {
+  now(): ISODate;
+  id(prefix: string): string;
+}
+
+export function counterClock(start = 0): Clock {
+  let n = start;
+  return {
+    now: () => "2026-01-01",
+    id: (prefix) => `${prefix}:${n++}`,
+  };
+}
+
+export const systemClock = (): Clock => ({
+  now: () => new Date().toISOString().slice(0, 10),
+  id: (prefix) => `${prefix}:${crypto.randomUUID()}`,
+});
+
+/* ------------------------------------------------------------------ */
+/* Import                                                              */
+/* ------------------------------------------------------------------ */
+
+export interface ImportReport {
+  readonly imported: number;
+  readonly duplicates: number;
+  readonly pairsFound: number;
+  readonly newPeople: readonly string[];
+}
+
+/** Stable across re-imports of overlapping date ranges. */
+export function importHash(accountId: string, row: RawRow): string {
+  const desc = row.descriptionParts.join(" | ").slice(0, 80);
+  return `${accountId}|${row.date}|${row.amount}|${desc}`;
+}
+
+function classify(row: RawRow, description: string): {
+  kind: TransactionKind;
+  counterpartyName: string | null;
+} {
+  // A machine type from the FI beats any description pattern.
+  const hint = (row.typeHint ?? "").toUpperCase();
+  const et = parseETransfer(
+    hint.includes("E_TRANSFER") ? `${hint} ${description}` : description,
+    row.amount
+  );
+  if (et) {
+    return {
+      kind: et.direction === "in" ? "etransfer_in" : "etransfer_out",
+      counterpartyName: et.named ? et.counterpartyName : null,
+    };
+  }
+  return { kind: row.amount > 0 ? "credit" : "purchase", counterpartyName: null };
+}
+
+export function importRows(
+  state: LedgerState,
+  rows: readonly RawRow[],
+  account: Account,
+  clock: Clock
+): { state: LedgerState; report: ImportReport } {
+  const known = new Set(state.transactions.map((t) => t.importHash));
+  const accounts = state.accounts.some((a) => a.id === account.id)
+    ? state.accounts
+    : [...state.accounts, account];
+
+  let people = [...state.people];
+  const newPeople: string[] = [];
+  const added: Transaction[] = [];
+  let duplicates = 0;
+
+  for (const row of rows) {
+    const hash = importHash(account.id, row);
+    if (known.has(hash)) {
+      duplicates++;
+      continue;
+    }
+    known.add(hash);
+
+    const description = row.descriptionParts.join(" | ");
+    const { kind, counterpartyName } = classify(row, description);
+
+    let personId: string | undefined;
+    if (counterpartyName) {
+      const before = people.length;
+      const observed = observePerson(people, counterpartyName);
+      people = observed.people;
+      personId = observed.person.id;
+      if (people.length > before) newPeople.push(observed.person.displayName);
+    }
+
+    // E-transfers are counterparty movements, not merchant purchases, so they
+    // never enter the merchant pipeline. Running them through it produces
+    // categories like "Dining" for a person's surname.
+    const isEtransfer = kind === "etransfer_in" || kind === "etransfer_out";
+    const merchantKey = isEtransfer
+      ? `etransfer:${personId ?? "unknown"}`
+      : normalizeMerchant(description);
+
+    const categoryId: CategoryId = isEtransfer
+      ? kind === "etransfer_in"
+        ? "Reimbursement"
+        : "Transfer"
+      : categorize({ merchantKey, amount: row.amount }, state.rules).categoryId;
+
+    const facts = state.merchants[merchantKey];
+
+    added.push({
+      id: clock.id("tx"),
+      importHash: hash,
+      accountId: account.id,
+      fi: account.fi,
+      date: row.date,
+      amount: row.amount,
+      currency: row.currency,
+      rawDescription: description,
+      merchantKey,
+      merchantName: isEtransfer
+        ? (counterpartyName ?? "Unknown")
+        : (facts?.name ?? titleCase(merchantKey)),
+      ...(facts?.note ? { merchantNote: facts.note } : {}),
+      merchantSource: facts ? "enriched" : isEtransfer ? "rule" : "rule",
+      ...(facts?.commonlyShared !== undefined ? { commonlyShared: facts.commonlyShared } : {}),
+      categoryId,
+      categorySource: "rule",
+      kind,
+      ...(personId ? { personId } : {}),
+      ...(row.originalAmount ? { originalAmount: row.originalAmount } : {}),
+    });
+  }
+
+  const paired = pairInternalTransfers([...state.transactions, ...added]);
+  const pairsFound =
+    paired.filter((t) => t.transferPairId).length / 2 -
+    state.transactions.filter((t) => t.transferPairId).length / 2;
+
+  return {
+    state: { ...state, accounts, people, transactions: paired },
+    report: { imported: added.length, duplicates, pairsFound: Math.max(0, pairsFound), newPeople },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Categorization overrides                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A manual override writes a user rule, so the next import of the same
+ * merchant lands in the right place without being corrected again. This is the
+ * feedback loop the first prototype described and did not implement.
+ */
+export function setCategory(
+  state: LedgerState,
+  transactionId: TransactionId,
+  categoryId: CategoryId,
+  opts: { applyToMerchant: boolean },
+  clock: Clock
+): LedgerState {
+  const tx = state.transactions.find((t) => t.id === transactionId);
+  if (!tx) return state;
+
+  const transactions = state.transactions.map((t) =>
+    t.id === transactionId ? { ...t, categoryId, categorySource: "user" as const } : t
+  );
+
+  if (!opts.applyToMerchant) return { ...state, transactions };
+
+  const rule: CategoryRule = {
+    id: clock.id("rule"),
+    pattern: `^${escapeRegExp(tx.merchantKey)}$`,
+    flags: "i",
+    categoryId,
+    source: "user",
+    priority: 1000,
+  };
+  const rules = [...state.rules.filter((r) => r.pattern !== rule.pattern), rule];
+  const retagged = transactions.map((t) =>
+    t.merchantKey === tx.merchantKey && t.categorySource !== "user"
+      ? { ...t, categoryId, categorySource: "rule" as const }
+      : t
+  );
+  return { ...state, rules, transactions: retagged };
+}
+
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export function applyMerchantFacts(
+  state: LedgerState,
+  facts: readonly MerchantFacts[]
+): LedgerState {
+  const merchants = { ...state.merchants };
+  for (const f of facts) merchants[f.key] = f;
+
+  const transactions = state.transactions.map((t) => {
+    const f = merchants[t.merchantKey];
+    if (!f) return t;
+    return {
+      ...t,
+      merchantName: f.name || t.merchantName,
+      ...(f.note ? { merchantNote: f.note } : {}),
+      merchantSource: "enriched" as const,
+      ...(f.commonlyShared !== undefined ? { commonlyShared: f.commonlyShared } : {}),
+      ...(t.categorySource === "user" || !f.categoryId
+        ? {}
+        : { categoryId: f.categoryId, categorySource: "enriched" as const }),
+    };
+  });
+  return { ...state, merchants, transactions };
+}
+
+/* ------------------------------------------------------------------ */
+/* Splits and settlement                                               */
+/* ------------------------------------------------------------------ */
+
+export function applySplit(
+  state: LedgerState,
+  transactionId: TransactionId,
+  spec: SplitSpec,
+  clock: Clock
+): LedgerState {
+  const tx = state.transactions.find((t) => t.id === transactionId);
+  if (!tx) return state;
+
+  const { claims } = computeSplit(tx, spec);
+  const kept = state.claims.filter(
+    (c) => c.transactionId !== transactionId || c.status === "settled"
+  );
+  const created: Claim[] = claims.map((c) => ({
+    ...c,
+    id: clock.id("claim"),
+    status: "open",
+    createdOn: tx.date,
+  }));
+  return { ...state, claims: [...kept, ...created] };
+}
+
+export function clearSplit(state: LedgerState, transactionId: TransactionId): LedgerState {
+  return {
+    ...state,
+    claims: state.claims.filter(
+      (c) => c.transactionId !== transactionId || c.status === "settled"
+    ),
+  };
+}
+
+/** Close a person's whole net position against one incoming transfer. */
+export function settle(
+  state: LedgerState,
+  transactionId: TransactionId,
+  clock: Clock
+): { state: LedgerState; settlement: Settlement | null } {
+  const tx = state.transactions.find((t) => t.id === transactionId);
+  if (!tx?.personId) return { state, settlement: null };
+
+  const proposal = proposeSettlement(tx.personId, tx.amount, state.claims);
+  if (!proposal) return { state, settlement: null };
+
+  const settlement: Settlement = {
+    id: clock.id("settlement"),
+    transactionId,
+    personId: tx.personId,
+    amount: abs(tx.amount),
+    claimIds: proposal.claimIds,
+    on: tx.date,
+    residual: proposal.residual,
+  };
+  const ids = new Set(proposal.claimIds);
+  return {
+    state: {
+      ...state,
+      claims: state.claims.map((c) =>
+        ids.has(c.id) ? { ...c, status: "settled" as const, settlementId: settlement.id } : c
+      ),
+      settlements: [...state.settlements, settlement],
+    },
+    settlement,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Reporting                                                           */
+/* ------------------------------------------------------------------ */
+
+export interface PeriodTotals {
+  readonly cashOut: Cents;
+  readonly yourShare: Cents;
+  readonly recovered: Cents;
+  readonly transactionCount: number;
+}
+
+export interface CategoryTotal {
+  readonly categoryId: CategoryId;
+  readonly cashOut: Cents;
+  readonly yourShare: Cents;
+  readonly transactionCount: number;
+}
+
+/**
+ * Spend excludes paired internal transfers and anything still sitting in the
+ * Transfer category. An e-transfer out becomes spend the moment it is given a
+ * real category, because paying someone back for dinner genuinely is dining.
+ */
+export function spendIn(state: LedgerState, period: string | null): Transaction[] {
+  return state.transactions.filter(
+    (t) =>
+      t.amount < 0 &&
+      !t.transferPairId &&
+      t.categoryId !== "Transfer" &&
+      (period === null || t.date.startsWith(period))
+  );
+}
+
+export function periodTotals(state: LedgerState, period: string | null): PeriodTotals {
+  const spend = spendIn(state, period);
+  const cashOut = sum(spend.map((t) => t.amount));
+  const yourShare = sum(spend.map((t) => effectiveAmount(t, state.claims)));
+  return {
+    cashOut,
+    yourShare,
+    recovered: cents(cashOut - yourShare),
+    transactionCount: spend.length,
+  };
+}
+
+export function categoryTotals(state: LedgerState, period: string | null): CategoryTotal[] {
+  const buckets = new Map<CategoryId, { cash: number; eff: number; n: number }>();
+  for (const t of spendIn(state, period)) {
+    const b = buckets.get(t.categoryId) ?? { cash: 0, eff: 0, n: 0 };
+    b.cash += -t.amount;
+    b.eff += -effectiveAmount(t, state.claims);
+    b.n++;
+    buckets.set(t.categoryId, b);
+  }
+  return [...buckets.entries()]
+    .map(([categoryId, b]) => ({
+      categoryId,
+      cashOut: cents(b.cash),
+      yourShare: cents(b.eff),
+      transactionCount: b.n,
+    }))
+    .sort((a, b) => b.yourShare - a.yourShare);
+}
+
+export interface PersonBalance {
+  readonly person: Person;
+  readonly net: Cents;
+  readonly openClaims: readonly Claim[];
+  readonly oldestOpenOn: ISODate | null;
+}
+
+export function personBalances(state: LedgerState): PersonBalance[] {
+  return state.people
+    .map((person) => {
+      const openClaims = state.claims.filter(
+        (c) => c.personId === person.id && c.status === "open"
+      );
+      const dates = openClaims.map((c) => c.createdOn).sort();
+      return {
+        person,
+        net: netPosition(person.id, state.claims),
+        openClaims,
+        oldestOpenOn: dates[0] ?? null,
+      };
+    })
+    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+}
+
+export interface AttentionItem {
+  readonly kind: "unidentified_merchant" | "stale_claim" | "unmatched_transfer" | "import_warning";
+  readonly count: number;
+  readonly detail: string;
+}
+
+export function needsAttention(
+  state: LedgerState,
+  today: ISODate,
+  opts: { staleAfterDays?: number } = {}
+): AttentionItem[] {
+  const stale = opts.staleAfterDays ?? 14;
+  const items: AttentionItem[] = [];
+
+  const unidentified = new Set(
+    state.transactions
+      .filter((t) => t.categoryId === "Uncategorized" && t.merchantSource !== "enriched")
+      .map((t) => t.merchantKey)
+  );
+  if (unidentified.size > 0) {
+    items.push({
+      kind: "unidentified_merchant",
+      count: unidentified.size,
+      detail: "the local rules did not recognize these merchants",
+    });
+  }
+
+  const todayN = Date.parse(today + "T00:00:00Z");
+  const staleClaims = state.claims.filter(
+    (c) =>
+      c.status === "open" &&
+      (todayN - Date.parse(c.createdOn + "T00:00:00Z")) / 86_400_000 > stale
+  );
+  if (staleClaims.length > 0) {
+    items.push({
+      kind: "stale_claim",
+      count: staleClaims.length,
+      detail: `open longer than ${stale} days`,
+    });
+  }
+
+  const settledTx = new Set(state.settlements.map((s) => s.transactionId));
+  const unmatched = state.transactions.filter(
+    (t) => t.kind === "etransfer_in" && !settledTx.has(t.id)
+  );
+  if (unmatched.length > 0) {
+    items.push({
+      kind: "unmatched_transfer",
+      count: unmatched.length,
+      detail: "received but not matched to a claim",
+    });
+  }
+  return items;
+}
+
+export { effectiveAmount, netPosition, proposeSettlement, ZERO };

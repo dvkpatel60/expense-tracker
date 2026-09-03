@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.vite/
+
+# Netlify
+.netlify/
+
+# Local env — ANTHROPIC_API_KEY belongs in Netlify site settings, never here
+.env
+.env.*
+!.env.example
+
+# Archives
+*.tar.gz
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Logs
+npm-debug.log*
+yarn-error.log*
+*.log
