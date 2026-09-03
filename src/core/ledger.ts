@@ -676,4 +676,91 @@ export function unmergePerson(
   return { state: { ...state, people: [...state.people, newPerson], claims, transactions }, person: newPerson };
 }
 
+/* ------------------------------------------------------------------ */
+/* Export                                                              */
+/* ------------------------------------------------------------------ */
+
+export type ExportFormat = "full" | "summary";
+
+export interface ExportOptions {
+  readonly period?: string | null;
+  readonly accountId?: string | null;
+  readonly format: ExportFormat;
+}
+
+function csvCell(value: string | number): string {
+  const s = String(value);
+  // Directive 04/EC-style quoting: wrap in quotes whenever a comma, quote or
+  // newline appears, doubling embedded quotes.
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function csvRow(cells: readonly (string | number)[]): string {
+  return cells.map(csvCell).join(",");
+}
+
+/** Serialize the ledger to CSV. "full" exports every transaction field for
+ *  round-tripping or analysis elsewhere; "summary" is the human-facing shape —
+ *  what left, what it was, what it cost you, and who was involved. Pure string
+ *  building; the browser download lives in the UI. */
+export function exportCsv(state: LedgerState, options: ExportOptions): string {
+  const txs = state.transactions.filter(
+    (t) =>
+      (!options.accountId || t.accountId === options.accountId) &&
+      (options.period === null || options.period === undefined || t.date.startsWith(options.period))
+  );
+  const sorted = [...txs].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const personName = (id: string | undefined): string => {
+    if (!id) return "";
+    return state.people.find((p) => p.id === id)?.displayName ?? "";
+  };
+  const accountLabel = (id: string): string =>
+    state.accounts.find((a) => a.id === id)?.label ?? id;
+
+  if (options.format === "summary") {
+    const lines = [csvRow(["Date", "Merchant", "Category", "Account", "Amount", "Your share", "People"])];
+    for (const t of sorted) {
+      const share = effectiveAmount(t, state.claims);
+      lines.push(
+        csvRow([
+          t.date,
+          t.merchantName,
+          t.categoryId,
+          accountLabel(t.accountId),
+          t.amount / 100,
+          share / 100,
+          personName(t.personId),
+        ])
+      );
+    }
+    return lines.join("\n") + "\n";
+  }
+
+  const keys = [
+    "id", "date", "amount", "currency", "merchant", "rawDescription",
+    "category", "merchantNote", "account", "person", "kind", "transferPairId",
+  ] as const;
+  const lines = [csvRow(keys as readonly string[])];
+  for (const t of sorted) {
+    lines.push(
+      csvRow([
+        t.id,
+        t.date,
+        t.amount / 100,
+        t.currency,
+        t.merchantName,
+        t.rawDescription,
+        t.categoryId,
+        t.merchantNote ?? "",
+        accountLabel(t.accountId),
+        personName(t.personId),
+        t.kind,
+        t.transferPairId ?? "",
+      ])
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+
 export { effectiveAmount, netPosition, proposeSettlement, ZERO };

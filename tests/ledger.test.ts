@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { cents } from "../src/core/money.js";
 import {
   applyMerchantFacts, applySplit, avgTransactionTotal, categoryTotals, counterClock,
-  editAccount, emptyLedger, importRows, mergePeople, needsAttention, periodTotals,
+  editAccount, emptyLedger, exportCsv, importRows, mergePeople, needsAttention, periodTotals,
   personBalances, setCategory, settle, spendIn, spendingVelocity, settlementRate,
   splitSharePercent, topCategoryDelta, unmergePerson,
 } from "../src/core/ledger.js";
@@ -490,3 +490,55 @@ function addDays(date: string, days: number): string {
   const d = new Date(Date.parse(date + "T00:00:00Z") + days * 86_400_000);
   return d.toISOString().slice(0, 10);
 }
+
+describe("exportCsv (task-10)", () => {
+  it("exports a summary with header and one row per transaction", () => {
+    const state = loadAll();
+    const csv = exportCsv(state, { format: "summary", period: null });
+    const lines = csv.trim().split("\n");
+    const header = lines[0]!.split(",");
+    expect(header).toEqual(["Date", "Merchant", "Category", "Account", "Amount", "Your share", "People"]);
+    // Header + one row per transaction.
+    expect(lines.length).toBe(state.transactions.length + 1);
+    // Every subsequent line has a YYYY-MM-DD date in the first cell.
+    for (const line of lines.slice(1)) {
+      expect(line).toMatch(/^\d{4}-\d{2}-\d{2},/);
+    }
+  });
+
+  it("marks cells with commas, quotes or newlines as quoted", () => {
+    const tx: Transaction = {
+      id: "tx:0", importHash: "h0", accountId: "acct:r", fi: "rbc",
+      date: "2026-07-01", amount: cents(-500), currency: "CAD",
+      rawDescription: 'a, "quoted"', merchantKey: "m", merchantName: 'Cafe "X", North',
+      merchantSource: "rule", categoryId: "Dining", categorySource: "rule", kind: "purchase",
+    };
+    const state: LedgerState = { ...emptyLedger(), transactions: [tx] };
+    const csv = exportCsv(state, { format: "summary", period: null });
+    expect(csv).toContain('"Cafe ""X"", North"');
+  });
+
+  it("filters by period prefix and account", () => {
+    const state = loadAll();
+    // Only rows in 2026-08 for the rbc account.
+    const filtered = exportCsv(state, { format: "summary", period: "2026-08", accountId: "acct:rbc" });
+    const lines = filtered.trim().split("\n").slice(1);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      expect(line.startsWith("2026-08-")).toBe(true);
+    }
+  });
+
+  it("includes the person's display name in the People column once split", () => {
+    let people: readonly Person[] = [];
+    let p: Person;
+    ({ people, person: p } = observePerson(people, "Sarah McKenna"));
+    const tx: Transaction = { id: "tx:0", importHash: "h0", accountId: "acct:r", fi: "rbc",
+      date: "2026-07-01", amount: cents(-4000), currency: "CAD", rawDescription: "dinner",
+      merchantKey: "m", merchantName: "Diner", merchantSource: "rule", categoryId: "Dining",
+      categorySource: "rule", kind: "etransfer_out", personId: p.id };
+    const state: LedgerState = { ...emptyLedger(), people, transactions: [tx] };
+    const csv = exportCsv(state, { format: "summary", period: null });
+    expect(csv).toContain("Sarah McKenna");
+  });
+});

@@ -5,8 +5,7 @@ import { detectParser } from "../../parsers/index.js";
 import { SAMPLES } from "../samples.js";
 import type { UseLedger } from "../useLedger.js";
 
-export function ImportView({ L }: { L: UseLedger }) {
-  const [text, setText] = useState("");
+export function ImportView({ L }: { L: UseLedger }) {  const [text, setText] = useState("");
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<AccountKind | null>(null);
   const [drag, setDrag] = useState(false);
@@ -149,8 +148,88 @@ export function ImportView({ L }: { L: UseLedger }) {
         )}
 
         <MerchantLookup L={L} />
+
+        {L.ledger.transactions.length > 0 && <ExportSection L={L} />}
       </div>
     </div>
+  );
+}
+
+/**
+ * CSV export. The ledger is local-first, so the way out is the same shape as
+ * the way in: a file the user keeps. Amounts are dollars; "your share" is what
+ * the row actually cost you after splits.
+ */
+function ExportSection({ L }: { L: UseLedger }) {
+  const [scope, setScope] = useState<"all" | "month">("all");
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [account, setAccount] = useState<string>("all");
+  const [format, setFormat] = useState<"summary" | "full">("summary");
+
+  const period = scope === "all" ? null : month;
+
+  function download() {
+    const csv = L.exportData({
+      period,
+      accountId: account === "all" ? null : account,
+      format,
+    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ledger-${period ?? "all"}${account !== "all" ? `-${account}` : ""}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">Export</h2>
+        <p className="panel-sub">Download your ledger as CSV — a file you keep</p>
+      </div>
+
+      <div className="field-label">Range</div>
+      <select className="select" aria-label="Export range" value={scope} onChange={(e) => setScope(e.target.value as "all" | "month")}>
+        <option value="all">All time</option>
+        <option value="month">Specific month</option>
+      </select>
+      {scope === "month" && (
+        <input
+          className="text-input"
+          type="month"
+          aria-label="Month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          style={{ marginTop: "0.5rem" }}
+        />
+      )}
+
+      <div className="field-label" style={{ marginTop: "0.9rem" }}>Account</div>
+      <select className="select" aria-label="Export account" value={account} onChange={(e) => setAccount(e.target.value)}>
+        <option value="all">All accounts</option>
+        {L.ledger.accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.label}
+          </option>
+        ))}
+      </select>
+
+      <div className="field-label" style={{ marginTop: "0.9rem" }}>Format</div>
+      <select className="select" aria-label="Export format" value={format} onChange={(e) => setFormat(e.target.value as "summary" | "full")}>
+        <option value="summary">Summary — what it was and what it cost you</option>
+        <option value="full">Full — every stored field</option>
+      </select>
+
+      <div className="btn-stack">
+        <button className="btn" onClick={download}>
+          Download
+        </button>
+      </div>
+    </section>
   );
 }
 

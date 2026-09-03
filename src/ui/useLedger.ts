@@ -5,6 +5,7 @@ import {
   clearSplit,
   editAccount as editAccountTransition,
   emptyLedger,
+  exportCsv as exportCsvTransition,
   importRows,
   mergePeople as mergePeopleTransition,
   setCategory,
@@ -12,7 +13,7 @@ import {
   systemClock,
   unmergePerson as unmergePersonTransition,
 } from "../core/ledger.js";
-import type { AccountPatch, ImportReport, LedgerState } from "../core/ledger.js";
+import type { AccountPatch, ExportOptions, ImportReport, LedgerState } from "../core/ledger.js";
 import { parseStatement } from "../parsers/index.js";
 import { load, save } from "../store/store.js";
 import { browserStore } from "./storage.js";
@@ -53,6 +54,8 @@ export interface UseLedger {
   importText(text: string, label: string, kind: AccountKind, fi?: FiId): ImportReport | null;
   /** Edit an account's label, kind, credit limit or opening balance. */
   editAccount(accountId: string, patch: AccountPatch): void;
+  /** Serialize the ledger to CSV per the given options. */
+  exportData(options: ExportOptions): string;
   /** Merge one person's claims, settlements and transactions into another. */
   mergePeople(keepId: string, mergeId: string): string | null;
   /** Move selected claims off a person into a new one named by an alias. */
@@ -207,6 +210,10 @@ export function useLedger(): UseLedger {
   const editAccount = useCallback((accountId: string, patch: AccountPatch) => {
     setLedger((prev) => editAccountTransition(prev, accountId, patch));
   }, []);
+
+  const exportData = useCallback((options: ExportOptions): string => {
+    return exportCsvTransition(ledger, options);
+  }, [ledger]);
 
   const mergePeople = useCallback((keepId: string, mergeId: string): string | null => {
     const keep = ledger.people.find((p) => p.id === keepId);
@@ -367,6 +374,7 @@ export function useLedger(): UseLedger {
     unsplit,
     reconcile,
     editAccount,
+    exportData,
     mergePeople,
     unmergePerson,
     identifyMerchants,
