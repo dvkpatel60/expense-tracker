@@ -17,6 +17,24 @@ describe("detection", () => {
     expect(d.parser.id).toBe("generic");
     expect(d.confidence).toBeLessThan(0.5);
   });
+
+  // A balance column is common to most bank exports. Scoring on it alone let
+  // Wealthsimple claim a chequing CSV it cannot read and reject every row.
+  it("does not claim a plain chequing export just because it has a balance", () => {
+    const text =
+      "Date,Description,Withdrawals,Deposits,Balance\n" +
+      '8/1/2026,"LOBLAWS #1052 TORONTO ON",147.92,,6390.17\n' +
+      '8/14/2026,"DIRECT DEPOSIT PAYROLL",,4812.66,11202.83\n';
+    expect(detectParser(text).parser.id).toBe("generic");
+
+    const r = parseStatement(text);
+    expect(r.rows).toHaveLength(2);
+    expect(r.rejected).toHaveLength(0);
+    expect(r.rows[0]?.amount).toBe(-14792);
+    expect(r.rows[1]?.amount).toBe(481266);
+    // Days above 12 prove M/D/Y, so August is not read as the 1st of the month.
+    expect(r.rows[1]?.date).toBe("2026-08-14");
+  });
 });
 
 describe("RBC", () => {

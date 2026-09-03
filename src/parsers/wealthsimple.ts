@@ -15,8 +15,12 @@ export const wealthsimpleParser: Parser = {
 
   detect(text) {
     const head = text.slice(0, 800).toLowerCase();
-    let score = 0;
-    if (head.includes("transaction_type")) score += 0.6;
+    // transaction_type is the only column unique to Wealthsimple. A balance
+    // column is common to most bank exports, so scoring on it alone was enough
+    // to beat the generic parser on a file this one cannot read — and claiming
+    // a file then rejecting every row of it is worse than never claiming it.
+    if (!head.includes("transaction_type")) return 0;
+    let score = 0.6;
     if (head.includes("balance")) score += 0.2;
     if (/e_transfer|aft_in|aft_out/.test(head)) score += 0.3;
     return Math.min(score, 1);
