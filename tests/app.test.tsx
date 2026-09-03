@@ -82,13 +82,35 @@ describe("App", () => {
 
     const sheet = await screen.findByRole("dialog");
     await user.click(within(sheet).getByRole("button", { name: /^Priya/ }));
-    await user.click(within(sheet).getByRole("button", { name: /split evenly/i }));
+    await user.click(within(sheet).getByRole("button", { name: /apply split/i }));
 
     await user.click(screen.getByRole("button", { name: /^Overview/ }));
     await screen.findByText(/your spend/i);
     expect(kpi("Recovered")).toContain("$107.30");
     // Cash out is unchanged; only the share moved.
     expect(kpi("Cash out")).toBe(cashOutBefore);
+  });
+
+  it("splits by percent through the strategy tabs", async () => {
+    const user = await boot();
+    await user.click(screen.getByRole("button", { name: /^Activity/ }));
+    await user.type(search(), "carnita");
+    await user.click(await screen.findByText(/La Carnita/i));
+
+    const sheet = await screen.findByRole("dialog");
+    await user.click(within(sheet).getByRole("button", { name: /^Priya/ }));
+    // Switch to the percent strategy and give Priya 30%.
+    await user.click(within(sheet).getByRole("tab", { name: "Percent" }));
+    const percentInput = within(sheet).getByPlaceholderText("%");
+    await user.type(percentInput, "30");
+    // Your share must be the remainder: 100 - 30 = 70%.
+    expect(await within(sheet).findByText(/your share 70%/)).toBeTruthy();
+    await user.click(within(sheet).getByRole("button", { name: /apply split/i }));
+
+    await user.click(screen.getByRole("button", { name: /^Overview/ }));
+    await screen.findByText(/your spend/i);
+    // 70% of $214.60 is $150.22 → recovered is the other 30% ≈ $64.38.
+    expect(kpi("Recovered")).toContain("$64.38");
   });
 
   it("offers only the providers the deployment has keys for", async () => {
@@ -140,7 +162,7 @@ describe("App", () => {
 
     let sheet = await screen.findByRole("dialog");
     await user.click(within(sheet).getByRole("button", { name: /^Priya/ }));
-    await user.click(within(sheet).getByRole("button", { name: /split evenly/i }));
+    await user.click(within(sheet).getByRole("button", { name: /apply split/i }));
 
     await user.clear(search());
     await user.type(search(), "priya");

@@ -950,6 +950,138 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 .btn.secondary:disabled { background: var(--panel-2); color: var(--ink-3); border-color: var(--line); }
 .btn-stack { display: grid; gap: 0.5rem; margin-top: 1rem; }
 
+/* Split strategy composer */
+
+.strategy-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0.85rem;
+  padding: 0.2rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.strategy-tabs button {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  border-radius: calc(var(--radius) - 2px);
+  font-size: var(--step--1);
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.strategy-tabs button.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.split-inputs {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.85rem 0;
+  padding: 0.7rem 0.8rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.split-input,
+.split-mine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: var(--step--1);
+}
+.split-input > span,
+.split-mine > span { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split-input > div {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+}
+.split-input input {
+  width: 4.6rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.split-input .unit { color: var(--ink-3); font-size: var(--step--1); }
+.split-mine { border-top: 1px solid var(--line); padding-top: 0.45rem; }
+.split-mine .num { font-weight: 600; }
+.split-mine .num-rem { color: var(--green); font-weight: 500; font-size: var(--step--1); }
+.split-sum {
+  margin-top: 0.2rem;
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}
+.split-sum .num { font-weight: 600; color: var(--ink); }
+.split-sum .warn { color: var(--red); font-weight: 600; }
+
+.itemized { display: grid; gap: 0.45rem; margin: 0.85rem 0; }
+.item-block {
+  padding: 0.55rem 0.6rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.item-row {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+.item-label {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.item-amount {
+  width: 6rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: right;
+}
+.item-remove {
+  color: var(--ink-3);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius);
+}
+.item-remove:hover { color: var(--red); background: var(--panel-2); }
+.item-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.who-tag {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  font-size: var(--step--2);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.who-tag:disabled { cursor: default; }
+.who-tag.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
 /* Detail belongs beside the data on a desktop, not on top of it. */
 @media (min-width: 960px) {
   .scrim { align-items: stretch; justify-content: flex-end; }
