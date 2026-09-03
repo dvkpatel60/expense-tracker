@@ -6,9 +6,11 @@ import {
   editAccount as editAccountTransition,
   emptyLedger,
   importRows,
+  mergePeople as mergePeopleTransition,
   setCategory,
   settle,
   systemClock,
+  unmergePerson as unmergePersonTransition,
 } from "../core/ledger.js";
 import type { AccountPatch, ImportReport, LedgerState } from "../core/ledger.js";
 import { parseStatement } from "../parsers/index.js";
@@ -51,6 +53,10 @@ export interface UseLedger {
   importText(text: string, label: string, kind: AccountKind, fi?: FiId): ImportReport | null;
   /** Edit an account's label, kind, credit limit or opening balance. */
   editAccount(accountId: string, patch: AccountPatch): void;
+  /** Merge one person's claims, settlements and transactions into another. */
+  mergePeople(keepId: string, mergeId: string): string | null;
+  /** Move selected claims off a person into a new one named by an alias. */
+  unmergePerson(personId: string, alias: string, claimIds: readonly string[]): string | null;
   loadSamples(
     samples: readonly { label: string; fi: FiId; kind: AccountKind; text: string }[]
   ): void;
@@ -202,6 +208,27 @@ export function useLedger(): UseLedger {
     setLedger((prev) => editAccountTransition(prev, accountId, patch));
   }, []);
 
+  const mergePeople = useCallback((keepId: string, mergeId: string): string | null => {
+    const keep = ledger.people.find((p) => p.id === keepId);
+    const merge = ledger.people.find((p) => p.id === mergeId);
+    if (!keep || !merge) return null;
+    const next = mergePeopleTransition(ledger, keepId, mergeId);
+    if (next === ledger) return null;
+    setLedger(next);
+    return `Merged ${merge.displayName} into ${keep.displayName}.`;
+  }, [ledger]);
+
+  const unmergePerson = useCallback((
+    personId: string,
+    alias: string,
+    claimIds: readonly string[]
+  ): string | null => {
+    const r = unmergePersonTransition(ledger, personId, alias, claimIds);
+    if (!r.person) return null;
+    setLedger(r.state);
+    return `Moved ${claimIds.length} claim(s) to ${r.person.displayName}.`;
+  }, [ledger]);
+
   const chooseProvider = useCallback(
     (provider: string) => {
       const spec = providers.find((p) => p.id === provider);
@@ -340,6 +367,8 @@ export function useLedger(): UseLedger {
     unsplit,
     reconcile,
     editAccount,
+    mergePeople,
+    unmergePerson,
     identifyMerchants,
     insights,
     insightsBusy,

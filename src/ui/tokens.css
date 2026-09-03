@@ -878,6 +878,34 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 .claim-list button:hover { color: var(--accent-ink); }
 .claim-list .num { margin-left: auto; font-weight: 600; }
 
+/* Person merge / unmerge affordances */
+.person-actions {
+  display: flex; gap: 1rem; align-items: center;
+  margin-top: 0.9rem; padding-top: 0.6rem; border-top: 1px solid var(--line);
+}
+.person-actions .link {
+  background: none; border: none; padding: 0;
+  color: var(--ink-2); font-size: var(--step--1); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.person-actions .link:hover:not(:disabled) { color: var(--accent-ink); }
+.person-actions .link:disabled { color: var(--ink-3); cursor: default; }
+.inline-form {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 0.6rem; width: 100%;
+}
+.inline-form select,
+.inline-form input[type="text"] { font: inherit; font-size: var(--step--1); }
+.tiny { color: var(--ink-2); font-size: var(--step--2); }
+.small { font: inherit; font-size: var(--step--1); padding: 0.25rem 0.6rem; }
+.small.primary { background: var(--accent-ink); color: var(--panel); border-color: transparent; }
+.unmerge { flex-direction: column; align-items: stretch; }
+.unmerge label { display: flex; flex-direction: column; gap: 0.25rem; }
+.unmerge-claims { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.unmerge-claims .who-tag { font-size: var(--step--1); }
+.unmerge-claims .who-tag input { margin-right: 0.3rem; }
+
 /* ---------- transaction drawer ---------- */
 
 .scrim {

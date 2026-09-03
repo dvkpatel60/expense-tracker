@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 import { cents } from "../src/core/money.js";
 import {
   applyMerchantFacts, applySplit, categoryTotals, counterClock, editAccount, emptyLedger,
-  importRows, needsAttention, periodTotals, personBalances, setCategory, settle, spendIn,
+  importRows, mergePeople, needsAttention, periodTotals, personBalances, setCategory, settle,
+  spendIn, unmergePerson,
 } from "../src/core/ledger.js";
 import type { LedgerState } from "../src/core/ledger.js";
 import { parseStatement } from "../src/parsers/index.js";
-import type { Account } from "../src/core/types.js";
+import type { Account, Claim, Person, Transaction } from "../src/core/types.js";
+import { observePerson } from "../src/core/people.js";
 
 const fixture = (n: string): string =>
   readFileSync(join(__dirname, "../src/parsers/__fixtures__", n), "utf8");
@@ -231,5 +233,122 @@ describe("editAccount", () => {
     const state = loadAll();
     const result = editAccount(state, "acct:nonexistent", { label: "Nope" });
     expect(result).toBe(state);
+  });
+});
+
+describe("mergePeople", () => {
+  function twoPeople(): { state: LedgerState; a: Person; b: Person } {
+    let people: readonly Person[] = [];
+    let p1: Person;
+    ({ people, person: p1 } = observePerson(people, "Sarah McKenna"));
+    let p2: Person;
+    ({ people, person: p2 } = observePerson(people, "S McKenna"));
+    const tx: Transaction = {
+      id: "tx:0",
+      importHash: "h0",
+      accountId: "acct:rbc",
+      fi: "rbc",
+      date: "2026-01-05",
+      amount: cents(-4000),
+      currency: "CAD",
+      rawDescription: "foo",
+      merchantKey: "etransfer:" + p2.id,
+      merchantName: "S McKenna",
+      merchantSource: "rule",
+      categoryId: "Transfer",
+      categorySource: "rule",
+      kind: "etransfer_out",
+      personId: p2.id,
+    };
+    const claim: Claim = {
+      id: "claim:0",
+      transactionId: "tx:0",
+      personId: p2.id,
+      amount: cents(2000),
+      direction: "i_owe_them",
+      status: "open",
+      createdOn: "2026-01-05",
+    };
+    return { state: { ...emptyLedger(), people, transactions: [tx], claims: [claim] }, a: p1, b: p2 };
+  }
+
+  it("redirects claims, transactions and settlements to the kept person and drops the merged one", () => {
+    const { state, a, b } = twoPeople();
+    const merged = mergePeople(state, a.id, b.id);
+
+    const people = merged.people;
+    expect(people).toHaveLength(1);
+    expect(people[0]!.id).toBe(a.id);
+    // Aliases from both gather on the survivor.
+    expect(people[0]!.aliases).toEqual(["Sarah McKenna", "S McKenna"]);
+
+    expect(merged.transactions.every((t) => t.personId === a.id)).toBe(true);
+    expect(merged.claims.every((c) => c.personId === a.id)).toBe(true);
+    expect(merged.claims[0]!.personId).toBe(a.id);
+  });
+
+  it("is a no-op when either id is missing or they are the same", () => {
+    const { state, a } = twoPeople();
+    expect(mergePeople(state, a.id, "person:nope")).toBe(state);
+    expect(mergePeople(state, "person:nope", a.id)).toBe(state);
+    expect(mergePeople(state, a.id, a.id)).toBe(state);
+  });
+});
+
+describe("unmergePerson", () => {
+  it("moves selected claims (and their transactions) to a new person named by the alias", () => {
+    // Build one person with two open claims on two transactions.
+    let people: readonly Person[] = [];
+    let p: Person;
+    ({ people, person: p } = observePerson(people, "Sarah McKenna"));
+    const txB: Transaction = {
+      id: "tx:1", importHash: "h1", accountId: "acct:rbc", fi: "rbc",
+      date: "2026-01-06", amount: cents(-5000), currency: "CAD",
+      rawDescription: "bar", merchantKey: "etransfer:" + p.id, merchantName: "Sarah M",
+      merchantSource: "rule", categoryId: "Transfer", categorySource: "rule",
+      kind: "etransfer_out", personId: p.id,
+    };
+    const clB: Claim = {
+      id: "claim:1", transactionId: "tx:1", personId: p.id, amount: cents(5000),
+      direction: "they_owe_me", status: "open", createdOn: "2026-01-06",
+    };
+    const state: LedgerState = {
+      ...emptyLedger(),
+      people,
+      transactions: [
+        { id: "tx:0", importHash: "h0", accountId: "acct:rbc", fi: "rbc",
+          date: "2026-01-05", amount: cents(-4000), currency: "CAD",
+          rawDescription: "foo", merchantKey: "etransfer:" + p.id, merchantName: "Sarah M",
+          merchantSource: "rule", categoryId: "Transfer", categorySource: "rule",
+          kind: "etransfer_out", personId: p.id },
+        txB,
+      ],
+      claims: [
+        { id: "claim:0", transactionId: "tx:0", personId: p.id, amount: cents(4000),
+          direction: "they_owe_me", status: "open", createdOn: "2026-01-05" },
+        clB,
+      ],
+    };
+
+    const { state: next, person } = unmergePerson(state, p.id, "S McKenna", ["claim:1"]);
+
+    expect(person).not.toBeNull();
+    expect(person!.displayName).toBe("S McKenna");
+    expect(next.people).toHaveLength(2);
+
+    // The moved claim now belongs to the new person; the other stays.
+    expect(next.claims.find((c) => c.id === "claim:0")!.personId).toBe(p.id);
+    expect(next.claims.find((c) => c.id === "claim:1")!.personId).toBe(person!.id);
+
+    // The transaction behind the moved claim follows its person.
+    expect(next.transactions.find((t) => t.id === "tx:0")!.personId).toBe(p.id);
+    expect(next.transactions.find((t) => t.id === "tx:1")!.personId).toBe(person!.id);
+  });
+
+  it("returns null for an unknown person or empty alias", () => {
+    let people: readonly Person[] = [];
+    ({ people } = observePerson(people, "Sarah McKenna"));
+    const state: LedgerState = { ...emptyLedger(), people };
+    expect(unmergePerson(state, "person:nope", "S", []).person).toBeNull();
   });
 });

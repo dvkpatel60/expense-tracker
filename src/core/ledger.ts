@@ -13,9 +13,11 @@ import type {
   CategoryId,
   CategoryRule,
   Claim,
+  ClaimId,
   ISODate,
   MerchantFacts,
   Person,
+  PersonId,
   RawRow,
   Settlement,
   SplitSpec,
@@ -525,6 +527,81 @@ export function needsAttention(
     });
   }
   return items;
+}
+
+/* ------------------------------------------------------------------ */
+/* People merge / unmerge                                              */
+/* ------------------------------------------------------------------ */
+
+/** Redirect all claims, settlements and transactions from one person to another,
+ *  combining aliases, then remove the source person. No-op when either id is
+ *  absent from the roster. */
+export function mergePeople(
+  state: LedgerState,
+  keepId: PersonId,
+  mergeId: PersonId
+): LedgerState {
+  const keep = state.people.find((p) => p.id === keepId);
+  const merge = state.people.find((p) => p.id === mergeId);
+  if (!keep || !merge || keepId === mergeId) return state;
+
+  const aliases = [...new Set([...keep.aliases, ...merge.aliases])];
+
+  return {
+    ...state,
+    people: [
+      ...state.people.filter((p) => p.id !== keepId && p.id !== mergeId),
+      { ...keep, aliases },
+    ],
+    claims: state.claims.map((c) =>
+      c.personId === mergeId ? { ...c, personId: keepId } : c
+    ),
+    settlements: state.settlements.map((s) =>
+      s.personId === mergeId ? { ...s, personId: keepId } : s
+    ),
+    transactions: state.transactions.map((t) =>
+      t.personId === mergeId ? { ...t, personId: keepId } : t
+    ),
+  };
+}
+
+/** Extract a person from a combined entity. Moves selected claims (by id) to a
+ *  new person whose displayName comes from the given alias. Returns the new
+ *  person for UI feedback; no-op when the person or alias is unknown.
+ *
+ *  The new person is always a fresh entry, never a dedup — the user split it
+ *  out on purpose, so re-observing the alias must not collapse it back into
+ *  the person they are leaving. */
+export function unmergePerson(
+  state: LedgerState,
+  personId: PersonId,
+  alias: string,
+  claimIds: readonly ClaimId[]
+): { state: LedgerState; person: Person | null } {
+  const existing = state.people.find((p) => p.id === personId);
+  if (!existing || !alias) return { state, person: null };
+
+  const displayName = titleCase(alias);
+  const taken = new Set(state.people.map((p) => p.id));
+  let base = `person:${displayName.toLowerCase().replace(/\s+/g, "-")}`;
+  let id = base;
+  for (let i = 2; taken.has(id); i++) id = `${base}~${i}`;
+  const newPerson: Person = { id, displayName, aliases: [displayName] };
+
+  const ids = new Set(claimIds);
+  const claims = state.claims.map((c) =>
+    ids.has(c.id) ? { ...c, personId: newPerson.id } : c
+  );
+  const movedTx = new Set(
+    claims.filter((c) => ids.has(c.id)).map((c) => c.transactionId)
+  );
+  const transactions = state.transactions.map((t) =>
+    t.personId === personId && movedTx.has(t.id)
+      ? { ...t, personId: newPerson.id }
+      : t
+  );
+
+  return { state: { ...state, people: [...state.people, newPerson], claims, transactions }, person: newPerson };
 }
 
 export { effectiveAmount, netPosition, proposeSettlement, ZERO };
