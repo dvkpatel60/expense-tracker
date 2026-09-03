@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(gh repo:*)",
+      "Bash(curl -s https://api.github.com/repos/mattpocock/skills/contents/)",
+      "Bash(curl -s https://api.github.com/repos/mattpocock/skills/contents/.claude-plugin)",
+      "Bash(curl:*)"
+    ]
+  }
+}
