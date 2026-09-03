@@ -490,4 +490,56 @@
        "detect -> map -> split" strip, and surface reject reasons as a collapsible
        list (the parsers already return them; ImportView just doesn't show them).
     Each change is verified by re-running the screenshot audit script to confirm
-    no clipping, no pointer-interception regressions, and the new elements render.
+      no clipping, no pointer-interception regressions, and the new elements render.
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase 7: Design-systems capstone (the "Apple" pass)
+# Turns feature-complete into "engineered, not bolted together": one motion
+# grammar, one type/space scale, instructive empty states, and a shared
+# interaction contract across every chart component.
+# ──────────────────────────────────────────────────────────────────────
+
+- id: "task-19"
+  title: "Design-systems capstone: motion grammar, type/space scale, empty-state and interaction contract"
+  skill: "designsystem"
+  files:
+    - src/ui/tokens.css
+    - src/ui/format.ts
+    - src/ui/components/CategoryDonut.tsx
+    - src/ui/components/CategoryLens.tsx
+    - src/ui/components/SpendChart.tsx
+    - src/ui/components/CopilotPanel.tsx
+    - src/ui/App.tsx
+    - tests/app.test.tsx
+  depends_on: ["task-13", "task-15", "task-17"]
+  agent: true
+  test: "npx vitest run tests/app.test.tsx && npm run typecheck"
+  done_when: "npx vitest run tests/app.test.tsx | grep -q 'Tests.*passed' && npm run typecheck"
+  notes: |
+    The craft pass that makes the app feel like a product team built it. This is
+    about consistency and restraint, not adding features. Run it with the
+    designsystem skill and review with the a11y skill.
+    1. Motion grammar: a single shared timing + easing definition in tokens.css
+       (--dur-fast/slow, --ease-out). Every transition in the app (donut drill,
+       lens pin, treemap morph, copilot stream, period switch) uses one of these
+       — no ad-hoc durations/eases. Honour prefers-reduced-motion (already a
+       global guard; make each animated element also safe to render static).
+    2. Type & space scale: audit every --step-* and the 1688px->1000px page
+       height. Lock to a strict modular scale; tighten vertical rhythm so views
+       don't scroll for the sake of padding. Tabular figures (already via .num)
+       stay uniform.
+    3. Empty/transient states: instruct, don't just show. The no-provider
+       Analysis state names the exact env vars and offers a "Set up AI" action;
+       empty ledger, no-splits, and no-category states each carry a one-line
+       next action. Consistent voice across all of them.
+    4. Interaction contract: one shared hover/focus rule for donut slices,
+       treemap cells, lens rows, spend chart and copilot cards — dim non-focus
+       context, highlight target, tooltip placement consistent, keyboard focus
+       order matches visual order. No chart re-invents interaction language.
+    5. Accessibility: run the a11y skill (WCAG 2.1 AA): colour contrast on the
+       moss/oxblood/ochre text-on-ivory combos, focus-visible everywhere,
+       the SVG charts keep aria-hidden behind real text equivalents. Reduced
+       motion + keyboard never regress a feature.
+    Success is measured by the screenshot audit: consistent spacing, one motion
+    feel, no clipped charts, empty states that explain themselves, focus rings
+    visible and in order.
