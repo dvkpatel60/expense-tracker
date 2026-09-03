@@ -2,6 +2,24 @@ import { CATEGORIES } from "../core/categorize.js";
 import type { CategoryId, MerchantFacts } from "../core/types.js";
 
 /**
+ * Names the model must never be allowed to label as merchants. The enrichment
+ * prompt asks it to identify real businesses, but a provider can reply with its
+ * own platform name ("Anthropic", "Gemini", "Google") as the merchant — which
+ * then pollutes the merchant cache and shows up in the UI as a bogus purchase.
+ * Match is case-insensitive and, for the two or three known first parties,
+ * also tolerates a small set of inflections (e.g. "Claude" / "Anthropic API").
+ */
+const RESERVED_MERCHANTS = new Set([
+  "anthropic",
+  "claude",
+  "gemini",
+  "google",
+  "openai",
+  "chatgpt",
+  "gpt",
+]);
+
+/**
  * Turn the model's JSON array into merchant facts.
  *
  * The array shape is dictated by our prompt, not by the provider, so every
@@ -43,9 +61,13 @@ function collect(items: readonly unknown[], today: string): MerchantFacts[] {
         ? (rawCategory as CategoryId)
         : undefined;
     if (typeof r["key"] !== "string" || !r["key"]) continue;
+    const name = typeof r["name"] === "string" && r["name"] ? r["name"] : r["key"];
+    // A provider naming itself as the merchant is a hallucination, not a fact.
+    // Reject it before it can reach the cache (see RESERVED_MERCHANTS).
+    if (RESERVED_MERCHANTS.has(name.toLowerCase())) continue;
     out.push({
       key: r["key"],
-      name: typeof r["name"] === "string" && r["name"] ? r["name"] : r["key"],
+      name,
       ...(typeof r["note"] === "string" && r["note"] ? { note: r["note"] } : {}),
       ...(category ? { categoryId: category } : {}),
       ...(typeof r["commonlyShared"] === "boolean"

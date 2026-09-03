@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { enrichMerchants, redactForLookup } from "../src/enrich/enricher.js";
+import { buildEnrichmentPrompt } from "../src/enrich/prompt.js";
 import { anthropicTransport, parseResponse } from "../src/enrich/anthropic.js";
 import type { MerchantFacts } from "../src/core/types.js";
 
@@ -66,6 +67,32 @@ describe("response parsing", () => {
 
   it("throws on a response that is not an array", () => {
     expect(() => parseResponse(wrap('{"key":"A"}'), "2026-09-01")).toThrow();
+  });
+
+  it("drops a provider that names itself as the merchant", () => {
+    const out = parseResponse(
+      wrap(
+        '[{"key":"ANTHROPIC","name":"Anthropic","category":"Subscription"},{"key":"LOBLAWS","name":"Loblaws","category":"Groceries"},{"key":"gemini","name":"Gemini","category":"Subscription"}]'
+      ),
+      "2026-09-01"
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]?.name).toBe("Loblaws");
+  });
+});
+
+describe("enrichment prompt", () => {
+  it("explicitly forbids provider names as merchants", () => {
+    const prompt = buildEnrichmentPrompt(["LOBLAWS"]);
+    expect(prompt).toContain("Anthropic");
+    expect(prompt).toContain("Gemini");
+    expect(prompt).toContain("not merchants");
+  });
+
+  it("lists every key it is asked to identify", () => {
+    const prompt = buildEnrichmentPrompt(["LOBLAWS", "BLUE DOOR COFFEE"]);
+    expect(prompt).toContain("- LOBLAWS");
+    expect(prompt).toContain("- BLUE DOOR COFFEE");
   });
 });
 

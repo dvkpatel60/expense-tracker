@@ -9,6 +9,7 @@ Respond with ONLY a JSON array, no preamble and no code fences. Each element:
 {"key":"<the input string verbatim>","name":"<proper business name>","note":"<max 12 words: what they are and where>","category":"<one of: ${CATEGORIES.join(", ")}>","commonlyShared":<true|false>}
 
 commonlyShared is true when this is the kind of purchase people typically split with friends.
+Never report a provider or platform name (Anthropic, Claude, Gemini, Google, OpenAI, etc.) as a business name — those are the AI services running this request, not merchants. If a string is or contains such a name, leave the name unchanged and use category "Uncategorized".
 If you cannot identify a string, return it with the name unchanged and category "Uncategorized".
 
 Strings:
