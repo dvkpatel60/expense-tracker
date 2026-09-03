@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  addManualTransaction,
   applyMerchantFacts,
   applySplit,
   clearSplit,
@@ -13,7 +14,13 @@ import {
   systemClock,
   unmergePerson as unmergePersonTransition,
 } from "../core/ledger.js";
-import type { AccountPatch, ExportOptions, ImportReport, LedgerState } from "../core/ledger.js";
+import type {
+  AccountPatch,
+  ExportOptions,
+  ImportReport,
+  LedgerState,
+  ManualEntry,
+} from "../core/ledger.js";
 import { parseStatement } from "../parsers/index.js";
 import { load, restoreBackup, save, serializeBackup } from "../store/store.js";
 import { browserStore } from "./storage.js";
@@ -54,6 +61,8 @@ export interface UseLedger {
   importText(text: string, label: string, kind: AccountKind, fi?: FiId): ImportReport | null;
   /** Edit an account's label, kind, credit limit or opening balance. */
   editAccount(accountId: string, patch: AccountPatch): void;
+  /** Add one transaction by hand — a cash purchase or a row an export missed. */
+  addManual(entry: ManualEntry): void;
   /** Serialize the ledger to CSV per the given options. */
   exportData(options: ExportOptions): string;
   /** The whole ledger as a versioned JSON backup file the user keeps. */
@@ -214,6 +223,19 @@ export function useLedger(): UseLedger {
 
   const editAccount = useCallback((accountId: string, patch: AccountPatch) => {
     setLedger((prev) => editAccountTransition(prev, accountId, patch));
+  }, []);
+
+  const addManual = useCallback((entry: ManualEntry) => {
+    setLedger((prev) => {
+      const next = addManualTransaction(prev, entry, clock);
+      if (next === prev) {
+        setStatus("That transaction could not be added — its account is unknown.");
+        return prev;
+      }
+      const verb = entry.amount > 0 ? "income" : "purchase";
+      setStatus(`Added a ${verb} of ${(Math.abs(entry.amount) / 100).toFixed(2)}.`);
+      return next;
+    });
   }, []);
 
   const exportData = useCallback((options: ExportOptions): string => {
@@ -409,6 +431,7 @@ export function useLedger(): UseLedger {
     unsplit,
     reconcile,
     editAccount,
+    addManual,
     exportData,
     backup,
     restore,

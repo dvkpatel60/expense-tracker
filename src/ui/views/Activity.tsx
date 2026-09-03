@@ -11,6 +11,7 @@ import {
 import { detectRecurring } from "../../core/recurring.js";
 import type { CategoryId, Transaction } from "../../core/types.js";
 import { categoryColor, dayLabel, dollarsAbs } from "../format.js";
+import { ManualEntrySheet } from "../components/ManualEntrySheet.js";
 import type { UseLedger } from "../useLedger.js";
 
 export type Filter = "all" | "unsplit" | "split" | "transfers" | "review" | "recurring";
@@ -49,6 +50,7 @@ export function Activity({
   );
   const [account, setAccount] = useState<string>("all");
   const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A one-line read on what this period was, so a row list is never the only
@@ -202,6 +204,12 @@ export function Activity({
               ))}
             </select>
           )}
+          {/* Capture that a bank export cannot: a cash purchase, or a row a
+              statement dropped. It sits with the filters because this is where
+              a user is already looking at their transactions. */}
+          <button className="btn secondary add-tx" onClick={() => setAdding(true)}>
+            + Add
+          </button>
         </div>
 
         <div className="facet-group">
@@ -301,6 +309,7 @@ export function Activity({
           )}
         </div>
       </div>
+      {adding && <ManualEntrySheet L={L} onClose={() => setAdding(false)} />}
     </>
   );
 }

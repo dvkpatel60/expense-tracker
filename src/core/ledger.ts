@@ -10,6 +10,7 @@ import { pairInternalTransfers } from "./pairing.js";
 import { computeSplit, effectiveAmount, netPosition, proposeSettlement } from "./split.js";
 import type {
   Account,
+  AccountId,
   AccountKind,
   CategoryId,
   CategoryRule,
@@ -195,6 +196,88 @@ export function importRows(
     state: { ...state, accounts, people, transactions: paired },
     report: { imported: added.length, duplicates, pairsFound: Math.max(0, pairsFound), newPeople },
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Manual entry                                                        */
+/* ------------------------------------------------------------------ */
+
+/** The account cash purchases land in. A bank export can never carry them, so
+ *  without a home here they are simply invisible to the ledger — and this app
+ *  exists to answer where the money went, cash included. */
+export const CASH_ACCOUNT_ID = "acct:cash" as AccountId;
+
+/** What the user types on the add-a-transaction form. Amount is signed the same
+ *  way an import is: negative is money leaving, positive is money in. */
+export interface ManualEntry {
+  readonly accountId: AccountId;
+  readonly date: ISODate;
+  readonly description: string;
+  readonly amount: Cents;
+  /** An explicit category the user chose; without it the rules decide, exactly
+   *  as they would for an imported row. */
+  readonly categoryId?: CategoryId;
+}
+
+/**
+ * Add one transaction by hand — a cash purchase, or a row a statement missed.
+ *
+ * A manual row is a full citizen: it is normalized, categorized and paired like
+ * any imported one, so it splits, files and reconciles with no special case
+ * downstream. The only thing that differs is provenance — its importHash is
+ * prefixed `manual|` so it can never be mistaken for, or collide with, a real
+ * bank row on a later import (whose hash is `accountId|date|amount|desc`).
+ *
+ * Selecting the built-in cash account creates it on first use; a bank export
+ * has no cash, so nothing else ever will.
+ */
+export function addManualTransaction(
+  state: LedgerState,
+  entry: ManualEntry,
+  clock: Clock
+): LedgerState {
+  let accounts = state.accounts;
+  if (!accounts.some((a) => a.id === entry.accountId)) {
+    if (entry.accountId !== CASH_ACCOUNT_ID) return state; // unknown account: refuse.
+    accounts = [
+      ...accounts,
+      { id: CASH_ACCOUNT_ID, label: "Cash", fi: "generic", kind: "cash" },
+    ];
+  }
+  const account = accounts.find((a) => a.id === entry.accountId)!;
+
+  const description = entry.description.trim() || "Manual entry";
+  const merchantKey = normalizeMerchant(description);
+  const facts = state.merchants[merchantKey];
+  const categoryId: CategoryId =
+    entry.categoryId ?? categorize({ merchantKey, amount: entry.amount }, state.rules).categoryId;
+
+  const id = clock.id("tx") as TransactionId;
+  const tx: Transaction = {
+    id,
+    // Unique by construction and prefixed so a later import of the same day and
+    // amount at a real merchant is never skipped as a "duplicate" of this.
+    importHash: `manual|${id}`,
+    accountId: account.id,
+    fi: account.fi,
+    date: entry.date,
+    amount: entry.amount,
+    currency: "CAD",
+    rawDescription: description,
+    merchantKey,
+    merchantName: facts?.name ?? titleCase(merchantKey),
+    ...(facts?.note ? { merchantNote: facts.note } : {}),
+    merchantSource: facts ? "enriched" : "rule",
+    ...(facts?.commonlyShared !== undefined ? { commonlyShared: facts.commonlyShared } : {}),
+    categoryId,
+    categorySource: entry.categoryId ? "user" : "rule",
+    kind: entry.amount > 0 ? "credit" : "purchase",
+  };
+
+  // Pair across the whole set for the same reason an import does: a manual
+  // card-payment entry could mirror a debit already sitting in another account.
+  const transactions = pairInternalTransfers([...state.transactions, tx]);
+  return { ...state, accounts, transactions };
 }
 
 /* ------------------------------------------------------------------ */

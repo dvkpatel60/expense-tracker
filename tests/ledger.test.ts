@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { cents, sum } from "../src/core/money.js";
 import {
-  applyMerchantFacts, applySplit, avgTransactionTotal, buildSpendTree, categoryTotals, counterClock,
+  addManualTransaction, applyMerchantFacts, applySplit, avgTransactionTotal, buildSpendTree,
+  CASH_ACCOUNT_ID, categoryTotals, counterClock,
   editAccount, emptyLedger, exportCsv, importRows, mergePeople, needsAttention, periodTotals,
   personBalances, setCategory, settle, spendIn, spendingVelocity, settlementRate,
   splitSharePercent, topCategoryDelta, unmergePerson,
@@ -585,5 +586,88 @@ describe("buildSpendTree (task-12)", () => {
     for (let i = 1; i < tree.length; i++) {
       expect(tree[i]!.yourShare).toBeLessThanOrEqual(tree[i - 1]!.yourShare);
     }
+  });
+});
+
+describe("manual entry", () => {
+  it("creates the cash account on first use and files a cash purchase", () => {
+    const clock = counterClock();
+    const state = addManualTransaction(
+      emptyLedger(),
+      { accountId: CASH_ACCOUNT_ID, date: "2026-08-10", description: "Farmers market", amount: cents(-2200) },
+      clock
+    );
+    expect(state.accounts).toHaveLength(1);
+    expect(state.accounts[0]?.id).toBe(CASH_ACCOUNT_ID);
+    expect(state.accounts[0]?.kind).toBe("cash");
+    expect(state.transactions).toHaveLength(1);
+    const tx = state.transactions[0]!;
+    expect(tx.amount).toBe(-2200);
+    expect(tx.kind).toBe("purchase");
+    expect(tx.importHash.startsWith("manual|")).toBe(true);
+    // Normalized like any imported row, so it categorizes and splits normally.
+    expect(tx.merchantKey.length).toBeGreaterThan(0);
+  });
+
+  it("counts as spend so it reaches the totals it should", () => {
+    const clock = counterClock();
+    const state = addManualTransaction(
+      emptyLedger(),
+      { accountId: CASH_ACCOUNT_ID, date: "2026-08-10", description: "Coffee cart", amount: cents(-500) },
+      clock
+    );
+    expect(spendIn(state, "2026-08").some((t) => t.amount === -500)).toBe(true);
+    expect(periodTotals(state, "2026-08").cashOut).toBe(cents(-500));
+  });
+
+  it("honours an explicit category as a user choice, not a guess", () => {
+    const clock = counterClock();
+    const state = addManualTransaction(
+      emptyLedger(),
+      {
+        accountId: CASH_ACCOUNT_ID,
+        date: "2026-08-10",
+        description: "Split a taxi",
+        amount: cents(-3000),
+        categoryId: "Transit",
+      },
+      clock
+    );
+    const tx = state.transactions[0]!;
+    expect(tx.categoryId).toBe("Transit");
+    expect(tx.categorySource).toBe("user");
+  });
+
+  it("marks income as a credit", () => {
+    const clock = counterClock();
+    const state = addManualTransaction(
+      emptyLedger(),
+      { accountId: CASH_ACCOUNT_ID, date: "2026-08-10", description: "Sold a bike", amount: cents(12000) },
+      clock
+    );
+    expect(state.transactions[0]?.kind).toBe("credit");
+  });
+
+  it("refuses an unknown account rather than orphan a transaction", () => {
+    const clock = counterClock();
+    const before = emptyLedger();
+    const after = addManualTransaction(
+      before,
+      { accountId: "acct:does-not-exist", date: "2026-08-10", description: "x", amount: cents(-100) },
+      clock
+    );
+    expect(after).toBe(before);
+  });
+
+  it("attaches to an existing account without creating cash", () => {
+    const clock = counterClock();
+    const seeded = { ...emptyLedger(), accounts: [ACCOUNTS.rbc!] };
+    const state = addManualTransaction(
+      seeded,
+      { accountId: "acct:rbc", date: "2026-08-10", description: "ATM withdrawal", amount: cents(-6000) },
+      clock
+    );
+    expect(state.accounts).toHaveLength(1);
+    expect(state.transactions[0]?.accountId).toBe("acct:rbc");
   });
 });

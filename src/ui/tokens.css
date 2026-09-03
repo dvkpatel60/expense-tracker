@@ -1008,6 +1008,9 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   box-shadow: var(--shadow);
 }
 .facet-row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+/* The capture button rides the filter row, so it must not take the full width
+   the .btn base gives it. */
+.facet-row .add-tx { width: auto; flex: none; white-space: nowrap; padding: 0.5rem 0.9rem; margin-left: auto; }
 
 /* Two questions, asked separately: which rows, and which categories. Twenty
    three chips in one undifferentiated wrap read as a wall of switches. */
