@@ -1,5 +1,6 @@
 import { formatCents } from "../core/money.js";
 import type { Cents } from "../core/money.js";
+import type { GroupId } from "../core/categorize.js";
 import type { CategoryId, ISODate } from "../core/types.js";
 
 export const dollars = (c: Cents): string => formatCents(c, { currency: true });
@@ -27,4 +28,19 @@ export function relativeDays(from: ISODate, to: ISODate): number {
  *  The scale lives in tokens.css; this is only the bridge to it. */
 export function categoryColor(id: CategoryId): string {
   return `var(--cat-${id.toLowerCase()})`;
+}
+
+/** Group names carry spaces and an ampersand, so unlike categories they need a
+ *  real map rather than a slug rule. */
+const GROUP_TOKEN: Readonly<Record<GroupId, string>> = {
+  Living: "living",
+  "Food & Drink": "food",
+  "Getting Around": "around",
+  Lifestyle: "lifestyle",
+  Money: "money",
+  Unsorted: "unsorted",
+};
+
+export function groupColor(id: GroupId): string {
+  return `var(--grp-${GROUP_TOKEN[id]})`;
 }

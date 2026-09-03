@@ -1,76 +1,95 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 /* ====================================================================
-   Slate & Signal.
+   Graphite & Gold.
 
-   A working admin console: one dark navy rail on the left, everything
-   else a light blue-grey canvas carrying white panels. Colour is
-   information, not decoration — blue is data and action, amber wants a
-   decision, green is money coming back, and every category owns a hue
-   that a swatch, a chip and a facet all agree on.
+   A working console in warm ivory rather than blue-grey: one graphite
+   rail on the left, everything to the right an ivory canvas carrying
+   white panels. Gold is data and action, moss is money coming back,
+   ochre wants a decision, oxblood is money going the wrong way.
 
-   The neutrals are blue-biased rather than grey so panels sit under the
-   accent instead of fighting it.
+   Gold is a weaker data colour than blue, so it is used at full
+   saturation only on fills and small solid marks, and darkened for any
+   text that has to hold contrast on white.
+
+   Categories are six colour families, not twenty-one hues. The family
+   is the reading level (see core/categorize.ts); the shades inside it
+   are the filing level, and they read as related on purpose.
    ==================================================================== */
 
 :root {
-  --navy: #0f1f52;
-  --navy-2: #1a2b66;
-  --navy-ink: #c9d4ee;
-  --navy-ink-2: #8fa0c8;
+  --rail: #22223b;
+  --rail-2: #2f2f4f;
+  --rail-ink: #c9c6d6;
+  --rail-ink-2: #918da6;
 
-  --canvas: #f4f6fa;
+  --canvas: #f5f3f0;
   --panel: #ffffff;
-  --panel-2: #f8fafc;
-  --line: #e4e8f0;
-  --line-2: #d5dbe7;
+  --panel-2: #faf8f5;
+  --line: #e6e1d9;
+  --line-2: #d6cfc3;
 
-  --ink: #0f172a;
-  --ink-2: #5a6478;
-  --ink-3: #8a94a6;
+  --ink: #1c1b22;
+  --ink-2: #5f5b55;
+  --ink-3: #8f8a82;
 
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-soft: #eff4ff;
-  --accent-line: #c7d9fb;
-  --data: #4c7ef3;
+  /* Gold: --accent fills, --accent-ink for text that must hold contrast. */
+  --accent: #9a7e2f;
+  --accent-ink: #7a6220;
+  --accent-hover: #866c26;
+  --accent-soft: #faf4e4;
+  --accent-line: #e3d5ab;
+  --data: #9a7e2f;
 
   /* The share of a payment other people covered. Neutral on purpose: it
      is money that is not yours, so it recedes rather than competes. */
-  --shared: #dce3f2;
+  --shared: #e6e1d9;
 
-  --amber: #f59e0b;
-  --amber-soft: #fef6e7;
-  --amber-ink: #92620a;
-  --green: #16a34a;
-  --red: #dc2626;
-  --purple: #8b5cf6;
+  --amber: #bc6c25;
+  --amber-soft: #fdf1e4;
+  --amber-ink: #8f5119;
+  --green: #4f772d;
+  --green-soft: #eef4e7;
+  --red: #9b2226;
+  --purple: #6d597a;
 
-  /* Category scale: mid-saturation, all legible on white. */
-  --cat-groceries: #16a34a;
-  --cat-dining: #ea580c;
-  --cat-coffee: #a16207;
-  --cat-alcohol: #be185d;
-  --cat-transport: #0891b2;
-  --cat-fuel: #ca8a04;
-  --cat-housing: #0d9488;
-  --cat-utilities: #0369a1;
-  --cat-telecom: #4f46e5;
-  --cat-subscriptions: #7c3aed;
-  --cat-shopping: #db2777;
-  --cat-household: #92400e;
-  --cat-health: #059669;
-  --cat-travel: #2563eb;
-  --cat-entertainment: #9333ea;
-  --cat-cash: #475569;
-  --cat-fees: #dc2626;
-  --cat-income: #15803d;
-  --cat-transfer: #64748b;
-  --cat-reimbursement: #0e7490;
-  --cat-uncategorized: #f59e0b;
+  /* Six families. The group hue leads; its categories are shades of it. */
+  --grp-living: #3d6b7d;
+  --grp-food: #b0603a;
+  --grp-around: #6b5b95;
+  --grp-lifestyle: #a34e6e;
+  --grp-money: #6b705c;
+  --grp-unsorted: #bc6c25;
 
-  --ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --cat-housing: #2f5666;
+  --cat-utilities: #3d6b7d;
+  --cat-telecom: #578597;
+  --cat-household: #79a2b2;
+
+  --cat-groceries: #8c4a2c;
+  --cat-dining: #b0603a;
+  --cat-coffee: #c47d55;
+  --cat-alcohol: #d29a77;
+
+  --cat-transport: #534279;
+  --cat-fuel: #6b5b95;
+  --cat-travel: #8d7fb3;
+
+  --cat-shopping: #883c58;
+  --cat-entertainment: #a34e6e;
+  --cat-health: #bb7189;
+  --cat-subscriptions: #cf95a7;
+
+  --cat-fees: #9b2226;
+  --cat-cash: #6b705c;
+  --cat-income: #4f772d;
+  --cat-transfer: #8a8f7d;
+  --cat-reimbursement: #a2a795;
+
+  --cat-uncategorized: #bc6c25;
+
+  --ui: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --step--2: 0.6875rem;
   --step--1: 0.8125rem;
@@ -84,8 +103,8 @@
   --sidebar-w: 240px;
   --rail-w: 340px;
 
-  --shadow: 0 1px 2px rgba(15, 31, 82, 0.05);
-  --shadow-pop: 0 10px 30px rgba(15, 31, 82, 0.12);
+  --shadow: 0 1px 2px rgba(34, 34, 59, 0.06);
+  --shadow-pop: 0 10px 30px rgba(34, 34, 59, 0.16);
 
   color-scheme: light;
 }
@@ -133,8 +152,8 @@ input, select, textarea { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   padding: 1.25rem 0.85rem 1rem;
-  background: var(--navy);
-  color: var(--navy-ink);
+  background: var(--rail);
+  color: var(--rail-ink);
 }
 
 .brand {
@@ -163,13 +182,13 @@ input, select, textarea { font: inherit; color: inherit; }
   width: 100%;
   padding: 0.6rem 0.7rem;
   border-radius: var(--radius);
-  color: var(--navy-ink);
+  color: var(--rail-ink);
   font-size: var(--step-0);
   font-weight: 500;
   text-align: left;
   transition: background 120ms, color 120ms;
 }
-.nav button:hover { background: var(--navy-2); color: #fff; }
+.nav button:hover { background: var(--rail-2); color: #fff; }
 .nav button[aria-current="page"] {
   background: var(--accent);
   color: #fff;
@@ -189,14 +208,14 @@ input, select, textarea { font: inherit; color: inherit; }
   font-weight: 700;
   text-align: center;
 }
-.nav button[aria-current="page"] .badge { background: #fff; color: var(--accent); }
+.nav button[aria-current="page"] .badge { background: #fff; color: var(--accent-ink); }
 
 .side-foot {
   margin-top: auto;
   padding: 0.85rem 0.9rem;
   border-radius: var(--radius);
-  background: var(--navy-2);
-  color: var(--navy-ink-2);
+  background: var(--rail-2);
+  color: var(--rail-ink-2);
   font-size: var(--step--1);
   line-height: 1.5;
 }
@@ -362,7 +381,7 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink-2); font-size: var(--step--1);
 }
 .chart-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
-.legend-line { width: 14px; height: 2px; background: var(--data); border-radius: 2px; }
+.legend-line { width: 14px; height: 2px; background: var(--accent-ink); border-radius: 2px; }
 .legend-fill { width: 14px; height: 10px; background: var(--shared); border-radius: 2px; }
 
 /* Category breakdown */
@@ -374,7 +393,7 @@ input, select, textarea { font: inherit; color: inherit; }
   padding: 0.6rem 0;
 }
 .cat-row + .cat-row { border-top: 1px solid var(--line); }
-.cat-row:hover .cat-name { color: var(--accent); }
+.cat-row:hover .cat-name { color: var(--accent-ink); }
 .cat-head { display: flex; align-items: baseline; gap: 0.55rem; }
 .cat-swatch { width: 9px; height: 9px; border-radius: 3px; flex: none; transform: translateY(-1px); }
 .cat-name { font-weight: 500; transition: color 120ms; }
@@ -390,6 +409,115 @@ input, select, textarea { font: inherit; color: inherit; }
 /* Outer length ranks the category; the inner solid is your share of it. */
 .bar > i { display: block; height: 100%; border-radius: 3px; background: var(--shared); }
 .bar > i > b { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+
+/* ---------- donut + breakdown ---------- */
+
+.breakdown {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+.breakdown-list { min-width: 0; }
+
+.donut-wrap { display: grid; gap: 0.9rem; justify-items: center; }
+.donut { position: relative; flex: none; }
+.donut svg { display: block; }
+.donut-slice { transition: opacity 120ms; }
+.donut-wrap:hover .donut-slice { opacity: 0.55; }
+.donut-wrap .donut-slice:hover { opacity: 1; cursor: pointer; }
+
+.donut-centre {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+.donut-total {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.donut-count { display: block; color: var(--ink-3); font-size: var(--step--2); margin-top: 0.1rem; }
+
+.donut-key { list-style: none; margin: 0; padding: 0; width: 100%; max-width: 230px; }
+.donut-key-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.28rem 0;
+  text-align: left;
+  font-size: var(--step--1);
+}
+.donut-key-row:disabled { cursor: default; }
+.donut-key-row i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.donut-key-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donut-key-value { margin-left: auto; font-weight: 600; }
+.donut-key-pct { color: var(--ink-3); width: 2.6rem; text-align: right; }
+.donut-back {
+  color: var(--accent-ink);
+  font-size: var(--step--1);
+  font-weight: 600;
+  padding: 0.2rem 0 0.4rem;
+}
+
+/* ---------- category lens ---------- */
+
+.lens {
+  position: fixed;
+  z-index: 30;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  padding: 0.7rem 0.85rem 0.55rem;
+  /* The pointer must be able to leave the row without the panel eating the
+     mouse-out that closes it. */
+  pointer-events: none;
+}
+.lens-head { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.5rem; }
+.lens-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.lens-title { font-weight: 600; font-size: var(--step--1); }
+.lens-count { margin-left: auto; color: var(--ink-3); font-size: var(--step--2); }
+
+.lens-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.1rem; }
+.lens-list li {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.25rem 0;
+  font-size: var(--step--1);
+  border-top: 1px solid var(--line);
+}
+.lens-list li:first-child { border-top: 0; }
+.lens-date { color: var(--ink-3); font-size: var(--step--2); }
+.lens-merchant { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lens-amount { font-weight: 600; }
+.lens-share { grid-column: 3; color: var(--green); font-size: var(--step--2); }
+
+.lens-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: var(--step--2);
+}
+.lens-pager button { color: var(--accent-ink); font-weight: 600; padding: 0 0.2rem; }
+.lens-pager button:disabled { color: var(--line-2); }
+
+@media (max-width: 720px) {
+  .breakdown { grid-template-columns: 1fr; }
+  .lens { display: none; }
+}
 
 /* ---------- attention ---------- */
 
@@ -408,7 +536,7 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--ink-2);
   white-space: nowrap;
 }
-.pill.act { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.pill.act { color: var(--accent-ink); border-color: var(--accent-line); background: var(--accent-soft); }
 
 /* ---------- AI insights rail ---------- */
 
@@ -425,7 +553,7 @@ input, select, textarea { font: inherit; color: inherit; }
   padding: 0.05rem 0.4rem;
   border-radius: 999px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--step--2);
   font-weight: 700;
   text-align: center;
@@ -488,7 +616,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 .insight-link {
   display: block;
   margin-top: 0.35rem;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--step--1);
   font-weight: 600;
 }
@@ -674,7 +802,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   border-radius: 50%;
   display: grid; place-items: center;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
   font-size: var(--step--1);
   flex: none;
@@ -696,7 +824,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   font-size: var(--step--1);
   text-align: left;
 }
-.claim-list button:hover { color: var(--accent); }
+.claim-list button:hover { color: var(--accent-ink); }
 .claim-list .num { margin-left: auto; font-weight: 600; }
 
 /* ---------- transaction drawer ---------- */
@@ -813,7 +941,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   resize: vertical;
 }
 .detected { color: var(--ink-2); font-size: var(--step--1); }
-.detected b { color: var(--accent); font-weight: 600; }
+.detected b { color: var(--accent-ink); font-weight: 600; }
 .text-input {
   width: 100%;
   padding: 0.55rem 0.85rem;
@@ -832,7 +960,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   font-size: var(--step--1);
   color: var(--ink);
 }
-.notice button { color: var(--accent); font-weight: 600; }
+.notice button { color: var(--accent-ink); font-weight: 600; }
 
 .empty {
   text-align: center;

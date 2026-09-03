@@ -117,7 +117,7 @@ export function SpendChart({
         <path
           d={stroke(points) ?? ""}
           fill="none"
-          stroke="var(--data)"
+          stroke="var(--accent-ink)"
           strokeWidth={2}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
@@ -133,7 +133,7 @@ export function SpendChart({
           />
         )}
         {/* The endpoint is the figure the KPI above states, so it is marked. */}
-        <circle cx={x(last.t)} cy={y(last.cash)} r={4} fill="var(--data)" />
+        <circle cx={x(last.t)} cy={y(last.cash)} r={4} fill="var(--accent-ink)" />
         <text
           x={0}
           y={height - 4}
@@ -179,17 +179,20 @@ export function ProportionBar({
   share,
   cash,
   max,
+  color,
 }: {
   share: Cents;
   cash: Cents;
   max: Cents;
+  /** The category's own colour, so the bar and the ring agree at a glance. */
+  color?: string;
 }) {
   const width = max === 0 ? 0 : Math.max(2, Math.min(100, (Math.abs(cash) / Math.abs(max)) * 100));
   const mine = cash === 0 ? 0 : Math.max(0, Math.min(100, (share / cash) * 100));
   return (
     <div className="bar" aria-hidden="true">
       <i style={{ width: `${width}%` }}>
-        <b style={{ width: `${mine}%` }} />
+        <b style={{ width: `${mine}%`, ...(color ? { background: color } : {}) }} />
       </i>
     </div>
   );

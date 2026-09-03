@@ -1,6 +1,7 @@
 import { abs, cents, sum, ZERO } from "./money.js";
 import type { Cents } from "./money.js";
-import { BUILTIN_RULES, categorize } from "./categorize.js";
+import { BUILTIN_RULES, categorize, groupOf } from "./categorize.js";
+import type { GroupId } from "./categorize.js";
 import { parseETransfer } from "./etransfer.js";
 import { normalizeMerchant } from "./normalize.js";
 import { observePerson, titleCase } from "./people.js";
@@ -388,6 +389,36 @@ export function categoryTotals(state: LedgerState, period: string | null): Categ
       cashOut: cents(b.cash),
       yourShare: cents(b.eff),
       transactionCount: b.n,
+    }))
+    .sort((a, b) => b.yourShare - a.yourShare);
+}
+
+export interface GroupTotal {
+  readonly groupId: GroupId;
+  readonly cashOut: Cents;
+  readonly yourShare: Cents;
+  readonly transactionCount: number;
+  /** The categories inside it, already sorted, so a drill-down needs no second pass. */
+  readonly categories: readonly CategoryTotal[];
+}
+
+/** The same report as categoryTotals, one level up. Built from it rather than
+ *  from the transactions again, so the two can never disagree. */
+export function groupTotals(state: LedgerState, period: string | null): GroupTotal[] {
+  const buckets = new Map<GroupId, CategoryTotal[]>();
+  for (const c of categoryTotals(state, period)) {
+    const group = groupOf(c.categoryId);
+    const bucket = buckets.get(group);
+    if (bucket) bucket.push(c);
+    else buckets.set(group, [c]);
+  }
+  return [...buckets.entries()]
+    .map(([groupId, categories]) => ({
+      groupId,
+      cashOut: cents(sum(categories.map((c) => c.cashOut))),
+      yourShare: cents(sum(categories.map((c) => c.yourShare))),
+      transactionCount: categories.reduce((n, c) => n + c.transactionCount, 0),
+      categories,
     }))
     .sort((a, b) => b.yourShare - a.yourShare);
 }

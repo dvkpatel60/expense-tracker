@@ -40,6 +40,54 @@ export const BUILTIN_RULES: readonly CategoryRule[] = [
   builtin("cardpayment", "PAYMENT - THANK YOU|VISA PAYMENT|MASTERCARD PAYMENT|CREDIT CARD PAYMENT|PAYMENT RECEIVED", "Transfer", 150),
 ];
 
+/* ------------------------------------------------------------------ */
+/* Macro grouping                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Twenty-one categories is the right resolution for a rule and the wrong one
+ * for a chart: nobody reads a pie with twenty-one slices, and twenty-one
+ * unrelated hues is noise rather than information. Groups are the reading
+ * level; categories stay the filing level.
+ *
+ * Derived, never persisted. Rules and user overrides are keyed to categories,
+ * so regrouping is a presentation change and costs no store migration.
+ */
+export type GroupId =
+  | "Living"
+  | "Food & Drink"
+  | "Getting Around"
+  | "Lifestyle"
+  | "Money"
+  | "Unsorted";
+
+export const GROUPS: readonly GroupId[] = [
+  "Living", "Food & Drink", "Getting Around", "Lifestyle", "Money", "Unsorted",
+];
+
+const GROUP_MEMBERS: Readonly<Record<GroupId, readonly CategoryId[]>> = {
+  Living: ["Housing", "Utilities", "Telecom", "Household"],
+  "Food & Drink": ["Groceries", "Dining", "Coffee", "Alcohol"],
+  "Getting Around": ["Transport", "Fuel", "Travel"],
+  Lifestyle: ["Shopping", "Entertainment", "Health", "Subscriptions"],
+  Money: ["Fees", "Cash", "Income", "Transfer", "Reimbursement"],
+  Unsorted: ["Uncategorized"],
+};
+
+const CATEGORY_GROUP: Readonly<Record<string, GroupId>> = Object.fromEntries(
+  GROUPS.flatMap((group) => GROUP_MEMBERS[group].map((c) => [c, group] as const))
+);
+
+/** A category the app does not know about is Unsorted, not a crash: an old
+ *  store or a hand-edited rule can carry one. */
+export function groupOf(categoryId: CategoryId): GroupId {
+  return CATEGORY_GROUP[categoryId] ?? "Unsorted";
+}
+
+export function categoriesIn(group: GroupId): readonly CategoryId[] {
+  return GROUP_MEMBERS[group];
+}
+
 export interface CategorizeInput {
   readonly merchantKey: string;
   readonly amount: number;

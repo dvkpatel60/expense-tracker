@@ -1,9 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { categoryTotals, needsAttention, periodTotals, spendIn } from "../../core/ledger.js";
+import { categoryTotals, groupTotals, needsAttention, periodTotals, spendIn } from "../../core/ledger.js";
+import type { GroupTotal } from "../../core/ledger.js";
 import { previousPeriod } from "../../core/digest.js";
 import { cents } from "../../core/money.js";
 import type { Cents } from "../../core/money.js";
+import { CategoryDonut } from "../components/CategoryDonut.js";
+import { CategoryLens } from "../components/CategoryLens.js";
 import { InsightsPanel } from "../components/InsightsPanel.js";
 import { ProportionBar, SpendChart } from "../components/SpendChart.js";
 import { Money } from "../components/Money.js";
@@ -27,7 +30,16 @@ export function Overview({
   const categories = categoryTotals(L.ledger, period);
   const spend = spendIn(L.ledger, period);
   const attention = needsAttention(L.ledger, L.today);
-  const maxCash = categories.reduce((m, c) => (c.cashOut > m ? c.cashOut : m), cents(1));
+  const groups = groupTotals(L.ledger, period);
+  const [drilled, setDrilled] = useState<GroupTotal | null>(null);
+  const [lens, setLens] = useState<{ categoryId: string; anchor: DOMRect } | null>(null);
+
+  // The ranked list follows the ring: drilled into a group, it lists that
+  // group's categories, so the two halves of the panel never disagree.
+  const listed = drilled
+    ? (groups.find((g) => g.groupId === drilled.groupId)?.categories ?? [])
+    : categories;
+  const maxCash = listed.reduce((m, c) => (c.cashOut > m ? c.cashOut : m), cents(1));
 
   // Surface a cached analysis for this period without asking a model anything.
   useEffect(() => {
@@ -77,13 +89,28 @@ export function Overview({
           <div className="panel-head">
             <h2 className="panel-title">Where it went</h2>
             <p className="panel-sub">
-              Ranked by size; the solid part of each bar is your share
+              {drilled
+                ? `${drilled.groupId} — hover a row to see what is in it`
+                : "By group; open one to see the categories inside it"}
             </p>
           </div>
-          {categories.map((c) => (
+
+          <div className="breakdown">
+            <CategoryDonut groups={groups} drilled={drilled} onDrill={setDrilled} />
+
+            <div className="breakdown-list">
+          {listed.map((c) => (
             <button
               className="cat-row"
               key={c.categoryId}
+              onMouseEnter={(e) =>
+                setLens({ categoryId: c.categoryId, anchor: e.currentTarget.getBoundingClientRect() })
+              }
+              onMouseLeave={() => setLens(null)}
+              onFocus={(e) =>
+                setLens({ categoryId: c.categoryId, anchor: e.currentTarget.getBoundingClientRect() })
+              }
+              onBlur={() => setLens(null)}
               onClick={() => onGoto("activity", { kind: "all", categoryId: c.categoryId })}
             >
               <span className="cat-head">
@@ -97,10 +124,18 @@ export function Overview({
                   )}
                 </span>
               </span>
-              <ProportionBar share={c.yourShare} cash={c.cashOut} max={maxCash} />
+              <ProportionBar
+                share={c.yourShare}
+                cash={c.cashOut}
+                max={maxCash}
+                color={categoryColor(c.categoryId)}
+              />
             </button>
           ))}
-          {categories.length === 0 && (
+            </div>
+          </div>
+
+          {listed.length === 0 && (
             <div className="insights-empty">No spending in {period ? monthLabel(period) : "this range"}.</div>
           )}
         </section>
@@ -155,6 +190,16 @@ export function Overview({
           </section>
         )}
       </div>
+
+      {lens && (
+        <CategoryLens
+          categoryId={lens.categoryId}
+          anchor={lens.anchor}
+          transactions={spend}
+          claims={L.ledger.claims}
+          onClose={() => setLens(null)}
+        />
+      )}
     </div>
   );
 }

@@ -141,7 +141,15 @@ migration to `MIGRATIONS` in `store/migrations.ts` keyed by the version being mi
 *from*, and add a case to `tests/store.test.ts`. Migrations compose, so an old install
 upgrades in one load. `load()` never throws — it returns an empty ledger plus a warning.
 
-**Categorization.** Rules are data (`CategoryRule`), not code. A malformed user regex is
+**Categorization.** Categories have two levels. The 21 `CATEGORIES` are the filing level
+— what a rule assigns and what a user overrides. `GROUPS` (six) are the reading level, and
+`groupOf` maps between them; `groupTotals` in `core/ledger.ts` is built from
+`categoryTotals` rather than from the transactions again, so the two cannot disagree. The
+mapping is derived, never persisted, so regrouping costs no store migration. In the UI a
+group owns a hue and its categories are shades of it (`--grp-*` and `--cat-*` in
+`tokens.css`, bridged by `groupColor`/`categoryColor` in `ui/format.ts`).
+
+Rules are data (`CategoryRule`), not code. A malformed user regex is
 skipped, never fatal. A manual override writes a user rule at priority 1000 so the next
 import of that merchant lands correctly, and enrichment must never overwrite
 `categorySource === "user"`.
