@@ -37,6 +37,9 @@ export interface ProviderSpec {
   /** `apiKey` is empty in the single-file build, which has no server to hold
    *  one; the auth header is then omitted rather than sent blank. */
   buildRequest(model: string, keys: readonly string[], apiKey: string): UpstreamRequest;
+  /** Same wire shape, caller-supplied prompt. Insights analysis rides through
+   *  here so a second feature cannot arrive with a second request builder. */
+  buildPromptRequest(model: string, prompt: string, apiKey: string): UpstreamRequest;
   extractText(data: unknown): string;
 }
 
@@ -64,6 +67,10 @@ const anthropic: ProviderSpec = {
   defaultModel: "claude-sonnet-5",
 
   buildRequest(model, keys, apiKey) {
+    return this.buildPromptRequest(model, buildEnrichmentPrompt(keys), apiKey);
+  },
+
+  buildPromptRequest(model, prompt, apiKey) {
     return {
       url: "https://api.anthropic.com/v1/messages",
       headers: {
@@ -74,7 +81,7 @@ const anthropic: ProviderSpec = {
       body: JSON.stringify({
         model,
         max_tokens: MAX_OUTPUT_TOKENS,
-        messages: [{ role: "user", content: buildEnrichmentPrompt(keys) }],
+        messages: [{ role: "user", content: prompt }],
       }),
     };
   },
@@ -109,6 +116,10 @@ const gemini: ProviderSpec = {
   defaultModel: "gemini-2.5-flash",
 
   buildRequest(model, keys, apiKey) {
+    return this.buildPromptRequest(model, buildEnrichmentPrompt(keys), apiKey);
+  },
+
+  buildPromptRequest(model, prompt, apiKey) {
     return {
       // The model id is a path segment, so it is encoded rather than trusted —
       // it reaches here from a request body.
@@ -118,7 +129,7 @@ const gemini: ProviderSpec = {
         ...(apiKey ? { "x-goog-api-key": apiKey } : {}),
       },
       body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: buildEnrichmentPrompt(keys) }] }],
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           temperature: 0,

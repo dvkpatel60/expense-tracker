@@ -1,4 +1,7 @@
 import { parseFacts } from "./facts.js";
+import { buildInsightsPrompt, parseInsights } from "./insights.js";
+import type { Insight } from "./insights.js";
+import type { InsightsDigest } from "../core/digest.js";
 import { providerFor, resolveModel } from "./providers.js";
 import type { ProviderId } from "./providers.js";
 import type { EnrichmentTransport } from "./types.js";
@@ -40,4 +43,25 @@ export function directTransport(config: {
       return parseFacts(spec.extractText(await res.json()), config.today);
     },
   };
+}
+
+/** Analysis for the single-file build: straight to the provider, credentials
+ *  supplied by whoever hosts the file. Same registry, same shared prompt. */
+export async function requestInsightsDirect(config: {
+  digest: InsightsDigest;
+  provider: ProviderId;
+  model?: string;
+  apiKey?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<Insight[]> {
+  const spec = providerFor(config.provider);
+  if (!spec) throw new Error(`Unknown provider: ${String(config.provider)}`);
+  const model = resolveModel(spec, config.model);
+  if (!model) throw new Error(`${spec.label} cannot use the model ${String(config.model)}.`);
+
+  const req = spec.buildPromptRequest(model, buildInsightsPrompt(config.digest), config.apiKey ?? "");
+  const doFetch = config.fetchImpl ?? fetch;
+  const res = await doFetch(req.url, { method: "POST", headers: req.headers, body: req.body });
+  if (!res.ok) throw new Error(`Analysis failed with status ${res.status}`);
+  return parseInsights(spec.extractText(await res.json()));
 }

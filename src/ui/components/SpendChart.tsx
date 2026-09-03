@@ -86,11 +86,11 @@ export function SpendChart({
         role="img"
         aria-label={`Cumulative spending. Cash out reached ${(last.cash / 100).toFixed(2)} dollars, your share ${(last.mine / 100).toFixed(2)} dollars.`}
       >
-        {hasGap && <path d={band(points) ?? ""} fill="var(--sand)" />}
+        {hasGap && <path d={band(points) ?? ""} fill="var(--moss)" />}
         <path
           d={stroke(points) ?? ""}
           fill="none"
-          stroke="var(--ink)"
+          stroke="var(--mint)"
           strokeWidth={2}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
@@ -99,7 +99,7 @@ export function SpendChart({
           <path
             d={mineStroke(points) ?? ""}
             fill="none"
-            stroke="var(--sand-deep)"
+            stroke="var(--ink-2)"
             strokeWidth={2}
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"

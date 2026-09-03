@@ -1,6 +1,6 @@
 import { formatCents } from "../core/money.js";
 import type { Cents } from "../core/money.js";
-import type { ISODate } from "../core/types.js";
+import type { CategoryId, ISODate } from "../core/types.js";
 
 export const dollars = (c: Cents): string => formatCents(c, { currency: true });
 export const dollarsAbs = (c: Cents): string =>
@@ -21,4 +21,10 @@ export function relativeDays(from: ISODate, to: ISODate): number {
   return Math.round(
     (Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000
   );
+}
+
+/** Every category id is a single word, so the CSS token is just its lowercase.
+ *  The scale lives in tokens.css; this is only the bridge to it. */
+export function categoryColor(id: CategoryId): string {
+  return `var(--cat-${id.toLowerCase()})`;
 }

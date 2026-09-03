@@ -29,7 +29,7 @@ them. Read it before changing `normalize.ts`, `split.ts`, or `pairing.ts`.
 ```
 npm run dev              # ./scripts/dev.sh — loads .env, serves app + /api on one port
 npm run dev:vite         # plain Vite, no /api routes
-npm test                 # vitest run — 13 files, 152 tests
+npm test                 # vitest run — 18 files, 185 tests
 npm run test:watch
 npm run typecheck        # tsc --noEmit
 npm run verify           # typecheck + test + build. Run this before claiming done.
@@ -66,7 +66,11 @@ ui/  →  parsers/ · store/ · enrich/  →  core/
   var holds the key) is one entry, while the prompt, JSON contract, batching, cache and
   privacy filter stay shared. `facts.ts` parses the model's array once for everyone;
   `proxy.ts` is the deployed path, `direct.ts` the single-file one.
-- **`ui/`** — React. All domain logic is called, never reimplemented.
+- **`ui/`** — React. All domain logic is called, never reimplemented. `App.tsx` is the
+  shell only (sidebar nav, period picker, drawer host); each view is a file in
+  `ui/views/`, and shared pieces are in `ui/components/`. A view owns its own filter
+  state; anything two views share is lifted into `App.tsx` (see `ActivityIntent`, which
+  replaced a module-scope variable that could not survive two navigations).
 - **`dev/`** — the local API server (a Vite plugin) and its in-memory SQLite merchant
   cache. Dev-only by construction: `devApi()` is `apply: "serve"` and `better-sqlite3` is a
   devDependency, so neither reaches the production bundle or the Netlify functions.
@@ -142,10 +146,19 @@ skipped, never fatal. A manual override writes a user rule at priority 1000 so t
 import of that merchant lands correctly, and enrichment must never overwrite
 `categorySource === "user"`.
 
+**Changing what AI analysis sees.** `core/digest.ts` is the whole contract: widening it
+means widening the documented privacy boundary, so it is a deliberate decision, not a
+convenience. Add the field to `InsightsDigest`, validate it in `validateDigest`
+(`enrich/insights.ts`) so the server enforces the new shape too, mention it in
+`buildInsightsPrompt`, and extend the exclusion assertions in `tests/digest.test.ts`.
+Insight *kinds* are a closed set in `insights.ts` and each renders differently in
+`ui/components/InsightsPanel.tsx`.
+
 ## Adding a provider
 
-One entry in `PROVIDERS` (`src/enrich/providers.ts`): `buildRequest` (url, headers, body),
-`extractText` (unwrap the envelope), and `envVar`. Nothing else changes — the picker is
+One entry in `PROVIDERS` (`src/enrich/providers.ts`): `buildPromptRequest` (url, headers,
+body for an arbitrary prompt), `buildRequest` (the enrichment prompt — delegates to
+`buildPromptRequest`), `extractText` (unwrap the envelope), and `envVar`. Nothing else changes — the picker is
 built from `/api/providers`, so a provider appears in the UI exactly when its key is set on
 the deployment, and disappears when it is removed.
 
@@ -159,28 +172,43 @@ Two rules the registry enforces and a new provider must not route around:
 
 ## The privacy boundary
 
-Only normalized merchant strings cross the network. Amounts, dates, balances, account
-numbers and counterparty names are structurally absent, not merely omitted. Enforcement is
-in three places and all three must stay in sync:
+Two things may cross the network, and nothing else.
 
-1. `enricher.ts` — filters `etransfer:` keys out of the request and only requests
-   cache misses.
-2. `netlify/functions/enrich.mts` — re-validates the list server-side (types, length,
-   count, no `etransfer:` prefix) so the boundary is enforced, not just promised.
-3. `netlify.toml` — CSP sets `connect-src 'self'`, so nothing on the page can reach a
+**1. Merchant identification** sends normalized merchant strings. Amounts, dates,
+balances, account numbers and counterparty names are structurally absent, not merely
+omitted.
+
+**2. AI analysis** sends the aggregates digest built by `core/digest.ts`: period label,
+period totals, per-category totals with a previous-period figure, top-15 merchant
+totals, and an open-claim count. There is nowhere in `InsightsDigest` to put an
+individual transaction, a day-level date, a balance, an account or a person — the shape
+is the enforcement. `tests/digest.test.ts` serializes a seeded digest and asserts that
+no person name, account id, `YYYY-MM-DD` date or `etransfer:` key appears anywhere in it.
+
+Enforcement is in three places for each, and all must stay in sync:
+
+1. `enricher.ts` filters `etransfer:` keys out of lookups and requests only cache
+   misses; `core/digest.ts` skips `etransfer:` merchants when building the digest.
+2. `netlify/functions/enrich.mts` re-validates the merchant list server-side, and
+   `netlify/functions/insights.mts` re-validates the digest via `validateDigest`
+   (`enrich/insights.ts`) — types, bounds, known categories, no `etransfer:` prefix, no
+   day-level date in `period`. The boundary is enforced, not just promised.
+3. `netlify.toml` sets CSP `connect-src 'self'`, so nothing on the page can reach a
    third-party origin.
 
-The function also normalizes the provider's response before replying, so provider envelopes
-never reach the browser, and `/api/providers` reports env var *names* and whether a key is
-present — never a value.
+Both functions normalize the provider's response before replying, so provider envelopes
+never reach the browser, and `/api/providers` reports env var *names* and whether a key
+is present — never a value.
 
-`tests/enrich.test.ts` asserts no dates or balances appear in the request body. Keep that
-assertion honest when changing the transport.
+`tests/enrich.test.ts` asserts no dates or balances appear in the enrichment request
+body; `tests/insights-function.test.ts` asserts the same of the analysis request. Keep
+both assertions honest when changing a transport.
 
-API keys live only in env vars — `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (see `.env.example`,
-and Netlify site settings for the deploy). With none set the app still works fully on local
-rules and lookup returns 503 with a message naming what to set. `VITE_ENRICH_MODE` is
-defined by `vite.config.ts` and selects `proxyTransport` vs `directTransport`.
+API keys live only in env vars — `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (see
+`.env.example`, and Netlify site settings for the deploy). With none set the app still
+works fully on local rules; lookup and analysis return 503 with a message naming what to
+set. `VITE_ENRICH_MODE` is defined by `vite.config.ts` and selects the proxy transports
+vs the direct ones.
 
 ## Testing notes
 
@@ -205,7 +233,6 @@ defined by `vite.config.ts` and selects `proxyTransport` vs `directTransport`.
 `expense-tracker-repo.tar.gz` sits untracked at root and is gitignored; it is a snapshot,
 not an input to the build.
 
-`README.md`'s "Known gaps" section is partly stale: it says "No UI. Next step." and "94
-tests", but the UI shipped and there are 107. Still accurate: no FX conversion
+Still accurate in `README.md`'s "Known gaps": no FX conversion
 (`originalAmount` is carried but never applied), no person merge/unmerge operation, and no
 rate limiting or retry on enrichment.

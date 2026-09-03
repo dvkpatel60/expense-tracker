@@ -59,5 +59,9 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
   if (url.includes("/api/providers")) {
     return new Response(JSON.stringify({ providers: [] }), { status: 200 });
   }
+  // Analysis is opt-in and needs a key; "not configured" is the honest default.
+  if (url.includes("/api/insights")) {
+    return new Response(JSON.stringify({ error: "No provider is configured." }), { status: 503 });
+  }
   throw new Error(`Unstubbed fetch in tests: ${url}`);
 }) as typeof fetch;

@@ -83,8 +83,21 @@ export function devApi(): Plugin {
         })();
       });
 
+      // Insights carry no cache: the digest changes with every edit to the
+      // ledger, and the client already remembers answers per digest hash.
+      server.middlewares.use("/api/insights", (req, res, next) => {
+        void (async () => {
+          try {
+            const handler = await load("insights.mts");
+            await send(res, await handler(toRequest(req, "/api/insights", await readBody(req))));
+          } catch (e) {
+            next(e as Error);
+          }
+        })();
+      });
+
       server.httpServer?.once("listening", () => {
-        log("/api/enrich and /api/providers are live");
+        log("/api/enrich, /api/insights and /api/providers are live");
       });
     },
   };

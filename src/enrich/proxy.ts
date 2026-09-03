@@ -1,4 +1,7 @@
 import { coerceFacts } from "./facts.js";
+import { coerceInsights } from "./insights.js";
+import type { Insight } from "./insights.js";
+import type { InsightsDigest } from "../core/digest.js";
 import type { ProviderAvailability, ProviderId } from "./providers.js";
 import type { EnrichmentTransport } from "./types.js";
 
@@ -71,4 +74,32 @@ export async function fetchProviders(config: {
   } catch {
     return [];
   }
+}
+
+/**
+ * Ask our own function to analyze the aggregates digest. One request, one
+ * answer — no transport interface, because unlike merchant lookup nothing
+ * batches or caches at this layer (the caller remembers answers per digest).
+ */
+export async function requestInsights(config: {
+  endpoint?: string;
+  digest: InsightsDigest;
+  provider: ProviderId;
+  model?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<Insight[]> {
+  const endpoint = config.endpoint ?? "/api/insights";
+  const doFetch = config.fetchImpl ?? fetch;
+  const res = await doFetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      digest: config.digest,
+      provider: config.provider,
+      ...(config.model ? { model: config.model } : {}),
+    }),
+  });
+  if (!res.ok) throw new Error(await explain(res));
+  const data: unknown = await res.json();
+  return coerceInsights((data as { insights?: unknown })?.insights);
 }

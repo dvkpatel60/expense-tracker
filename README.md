@@ -5,7 +5,8 @@
 Local-first expense tracking and bill splitting for Canadian bank exports.
 Consolidates RBC, Scotiabank and Wealthsimple CSVs into one categorized ledger,
 tracks Interac e-transfers as people rather than merchants, and nets claims
-across rotating groups.
+across rotating groups. It answers the one question a bank statement cannot:
+**of the money that left your accounts, how much was actually yours?**
 
 ## Quick start
 
@@ -18,7 +19,7 @@ npm run dev
 Then open <http://localhost:5173> and press **Try it with sample data**.
 
 `npm run dev` runs `scripts/dev.sh`: it loads `.env`, prints which providers are
-configured, and starts Vite. A dev-only Vite plugin serves `/api/enrich` and
+configured, and starts Vite. A dev-only Vite plugin serves `/api/enrich`, `/api/insights` and
 `/api/providers` on the same port from the same function source Netlify bundles,
 so the one part of the app that talks to a provider is not the one part you can
 only test by deploying. Merchant lookups are cached in an in-memory SQLite table
@@ -44,12 +45,13 @@ src/
     pairing.ts     Cross-account internal transfer detection
     split.ts       Split strategies, effective spend, netting settlement
     ledger.ts      State transitions and reporting
+    digest.ts      Aggregates-only view — the only spending data AI ever sees
   parsers/       One file per FI behind a common interface, plus fixtures
   store/         Versioned persistence with migrations
   enrich/        Merchant lookup behind a provider registry + injectable transport
   ui/            React. Calls the domain, never reimplements it
 dev/             Local API server (Vite plugin) + in-memory SQLite merchant cache
-tests/           152 tests
+tests/           185 tests
 ```
 
 ## Design decisions
@@ -99,6 +101,17 @@ strings cross the network — no amounts, dates, balances, account numbers or
 counterparty names. `redactForLookup` enforces it and a test asserts the request
 body contains no dates or balances.
 
+**AI analysis sees aggregates, never transactions.** `core/digest.ts` builds the
+only spending data that leaves the device: period totals, per-category totals
+with a previous-period comparison, top-15 merchant totals, an open-claim count.
+`InsightsDigest` has nowhere to put an individual purchase, a day-level date, a
+balance, an account or a person, so the limit is structural rather than a
+promise — and a test serializes a real digest to assert none of those appear.
+The model answers in typed insights the UI renders natively (headline, trend,
+anomaly, habit, action), not prose in a chat box, and any insight about a
+category links straight to those transactions. Answers are cached per digest, so
+nothing is bought twice and no request fires without a click.
+
 ## Known gaps
 
 - FX: `originalAmount` is carried on `RawRow` and `Transaction` but no
@@ -120,11 +133,14 @@ dashboard except the environment variables:
 | `ANTHROPIC_API_KEY` | Site settings > Environment variables | Enables the Anthropic models |
 | `GEMINI_API_KEY` | Site settings > Environment variables | Enables the Gemini models |
 
+One key enables both features that use a model: merchant identification and
+Overview analysis.
+
 Set either, both, or neither. The provider picker in the app is built from
 `/api/providers`, which reports which keys are present — so a provider appears
 exactly when it is configured. With none set the app still works: every local
-rule runs and merchant identification returns 503 with a message naming what to
-set.
+rule runs, and merchant identification and analysis return 503 with a message
+naming what to set.
 
 ### Why there are serverless functions
 
@@ -139,6 +155,11 @@ function would relay any model on the account.
 
 It normalizes the provider's response before replying, so provider envelopes
 never reach the browser and adding a provider changes nothing on the client.
+
+`netlify/functions/insights.mts` is the same shape for AI analysis: it takes the
+aggregates digest, re-validates it (bounded arrays, known categories, no
+day-level date, no counterparty keys) so "aggregates only" is enforced on the
+server rather than promised by the client, and returns typed insights.
 
 `netlify/functions/providers.mts` answers `/api/providers` with the catalogue
 and, for each provider, whether its key is set. That is what makes the picker
@@ -159,7 +180,7 @@ exfiltrate to a third-party origin from the page.
 ```
 npm run dev           # app + /api on http://localhost:5173
 npm run dev:vite      # plain Vite, no /api routes
-npm test              # vitest — 152 tests
+npm test              # vitest — 185 tests
 npm run test:watch
 npm run typecheck     # tsc --noEmit, strict + noUncheckedIndexedAccess
 npm run verify        # typecheck + test + build

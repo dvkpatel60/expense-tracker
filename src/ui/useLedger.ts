@@ -14,8 +14,11 @@ import { parseStatement } from "../parsers/index.js";
 import { load, save } from "../store/store.js";
 import { browserStore } from "./storage.js";
 import { enrichMerchants } from "../enrich/enricher.js";
-import { directTransport } from "../enrich/direct.js";
-import { fetchProviders, proxyTransport } from "../enrich/proxy.js";
+import { directTransport, requestInsightsDirect } from "../enrich/direct.js";
+import { fetchProviders, proxyTransport, requestInsights } from "../enrich/proxy.js";
+import { coerceInsights } from "../enrich/insights.js";
+import type { Insight } from "../enrich/insights.js";
+import { buildInsightsDigest } from "../core/digest.js";
 import { PROVIDERS, describeProviders } from "../enrich/providers.js";
 import type { ProviderAvailability } from "../enrich/providers.js";
 // Aliased: the hook already exposes `reconcile` for settling a transaction.
@@ -50,6 +53,12 @@ export interface UseLedger {
   unsplit(id: TransactionId): void;
   reconcile(id: TransactionId): void;
   identifyMerchants(): Promise<void>;
+  /** Structured AI analysis of the current period; null until generated. */
+  insights: readonly Insight[] | null;
+  insightsBusy: boolean;
+  generateInsights(period: string | null): Promise<void>;
+  /** Show a cached analysis for this period if one exists; never calls a model. */
+  peekInsights(period: string | null): Promise<void>;
   reset(): void;
   dismissStatus(): void;
 }
@@ -61,6 +70,8 @@ export function useLedger(): UseLedger {
   const [busy, setBusy] = useState(false);
   const [providers, setProviders] = useState<readonly ProviderAvailability[]>([]);
   const [enrichment, setEnrichment] = useState<EnrichmentSettings | null>(null);
+  const [insights, setInsights] = useState<readonly Insight[] | null>(null);
+  const [insightsBusy, setInsightsBusy] = useState(false);
   const store = useRef(browserStore());
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -244,6 +255,58 @@ export function useLedger(): UseLedger {
     }
   }, [ledger.transactions, ledger.merchants, today, enrichment, providers]);
 
+  // Answers are remembered per digest, so revisiting a period is free and no
+  // model is ever called without a click. Editing the ledger changes the
+  // digest, which is exactly when a fresh analysis is worth paying for.
+  const insightsKey = (period: string | null, digest: unknown): string =>
+    `split-ledger:insights:${period ?? "all"}:${fnv1a(JSON.stringify(digest))}`;
+
+  const peekInsights = useCallback(
+    async (period: string | null) => {
+      const digest = buildInsightsDigest(ledger, period);
+      const cached = await store.current.get(insightsKey(period, digest)).catch(() => null);
+      if (!cached) {
+        setInsights(null);
+        return;
+      }
+      try {
+        setInsights(coerceInsights(JSON.parse(cached)));
+      } catch {
+        setInsights(null);
+      }
+    },
+    [ledger]
+  );
+
+  const generateInsights = useCallback(
+    async (period: string | null) => {
+      const digest = buildInsightsDigest(ledger, period);
+      const key = insightsKey(period, digest);
+      const direct = import.meta.env.VITE_ENRICH_MODE === "direct";
+      if (!direct && !enrichment) {
+        setStatus("No AI provider is configured on this deployment, so analysis is unavailable.");
+        return;
+      }
+      setInsightsBusy(true);
+      try {
+        const provider = enrichment?.provider ?? PROVIDERS[0]!.id;
+        const args = {
+          digest,
+          provider,
+          ...(enrichment ? { model: enrichment.model } : {}),
+        };
+        const result = direct ? await requestInsightsDirect(args) : await requestInsights(args);
+        setInsights(result);
+        void store.current.set(key, JSON.stringify(result)).catch(() => {});
+      } catch (e) {
+        setStatus(e instanceof Error ? e.message : "Analysis failed.");
+      } finally {
+        setInsightsBusy(false);
+      }
+    },
+    [ledger, enrichment]
+  );
+
   const reset = useCallback(() => {
     setLedger(emptyLedger());
     void store.current.remove("split-ledger").catch(() => {});
@@ -267,7 +330,21 @@ export function useLedger(): UseLedger {
     unsplit,
     reconcile,
     identifyMerchants,
+    insights,
+    insightsBusy,
+    generateInsights,
+    peekInsights,
     reset,
     dismissStatus: () => setStatus(null),
   };
+}
+
+/** Tiny stable hash for cache keys; collisions merely re-ask the model. */
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 }
