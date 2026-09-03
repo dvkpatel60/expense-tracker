@@ -34,6 +34,17 @@ export function App() {
   const openTx = L.ledger.transactions.find((t) => t.id === openId) ?? null;
   const empty = L.ledger.transactions.length === 0;
 
+  const inPeriod = L.ledger.transactions.filter(
+    (t) => period === null || t.date.startsWith(period)
+  ).length;
+  const accounts = L.ledger.accounts.length;
+  const subtitle =
+    view === "people"
+      ? `${L.ledger.people.length} ${L.ledger.people.length === 1 ? "person" : "people"} · ${openClaims} open ${openClaims === 1 ? "claim" : "claims"}`
+      : view === "import"
+        ? `${accounts} ${accounts === 1 ? "account" : "accounts"} · ${L.ledger.transactions.length} transactions held`
+        : `${inPeriod} transactions · ${accounts} ${accounts === 1 ? "account" : "accounts"} · ${period ? monthLabel(period) : "all time"}`;
+
   const goto = (v: View, i?: ActivityIntent): void => {
     setIntent(i ?? null);
     setView(v);
@@ -77,12 +88,21 @@ export function App() {
 
       <main className="main">
         {empty && view !== "import" ? (
-          <Welcome onLoad={() => L.loadSamples(SAMPLES)} onImport={() => goto("import")} />
+          <div className="content">
+            <Welcome onLoad={() => L.loadSamples(SAMPLES)} onImport={() => goto("import")} />
+          </div>
         ) : (
           <>
             <header className="topbar">
-              <h1 className="view-title">{TITLES[view]}</h1>
-              {(view === "summary" || view === "activity") && (
+              <div className="topbar-titles">
+                <h1 className="view-title">{TITLES[view]}</h1>
+                <p className="view-sub">{subtitle}</p>
+              </div>
+            </header>
+
+            {(view === "summary" || view === "activity") && (
+              <div className="filterbar">
+                <span className="filter-label">Time period</span>
                 <span className="period">
                   <select
                     value={period ?? "all"}
@@ -100,24 +120,23 @@ export function App() {
                     <path d="M3 4.5 6 8l3-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
                 </span>
-              )}
-            </header>
-
-            {L.status && (
-              <div className="notice" style={{ marginBottom: "1rem" }} role="status">
-                {L.status}{" "}
-                <button style={{ color: "var(--mint)" }} onClick={L.dismissStatus}>
-                  Dismiss
-                </button>
               </div>
             )}
 
-            {view === "summary" && <Overview L={L} period={period} onGoto={goto} />}
-            {view === "activity" && (
-              <Activity L={L} period={period} intent={intent} onOpen={setOpenId} />
-            )}
-            {view === "people" && <People L={L} onOpen={setOpenId} />}
-            {view === "import" && <ImportView L={L} />}
+            <div className="content">
+              {L.status && (
+                <div className="notice" style={{ marginBottom: "0.85rem" }} role="status">
+                  {L.status} <button onClick={L.dismissStatus}>Dismiss</button>
+                </div>
+              )}
+
+              {view === "summary" && <Overview L={L} period={period} onGoto={goto} />}
+              {view === "activity" && (
+                <Activity L={L} period={period} intent={intent} onOpen={setOpenId} />
+              )}
+              {view === "people" && <People L={L} onOpen={setOpenId} />}
+              {view === "import" && <ImportView L={L} />}
+            </div>
           </>
         )}
       </main>

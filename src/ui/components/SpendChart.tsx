@@ -22,7 +22,7 @@ interface Point {
 export function SpendChart({
   transactions,
   claims,
-  height = 132,
+  height = 190,
 }: {
   transactions: readonly Transaction[];
   claims: readonly Claim[];
@@ -48,7 +48,7 @@ export function SpendChart({
   if (points.length < 2) return null;
 
   const width = 700;
-  const pad = { top: 8, bottom: 18 };
+  const pad = { top: 14, bottom: 24 };
   const inner = height - pad.top - pad.bottom;
 
   const x = scaleUtc()
@@ -77,6 +77,11 @@ export function SpendChart({
 
   const last = points[points.length - 1]!;
   const hasGap = last.cash - last.mine > 0;
+  const ticks = y.ticks(3);
+  const money = (c: number): string =>
+    c >= 100_000 ? `$${Math.round(c / 100_000)}k` : `$${Math.round(c / 100)}`;
+  const dayLabel = (t: number): string =>
+    new Date(t).toLocaleDateString("en-CA", { day: "numeric", month: "short", timeZone: "UTC" });
 
   return (
     <div className="chart">
@@ -86,11 +91,33 @@ export function SpendChart({
         role="img"
         aria-label={`Cumulative spending. Cash out reached ${(last.cash / 100).toFixed(2)} dollars, your share ${(last.mine / 100).toFixed(2)} dollars.`}
       >
-        {hasGap && <path d={band(points) ?? ""} fill="var(--moss)" />}
+        {ticks.map((v) => (
+          <g key={v}>
+            <line
+              x1={0}
+              x2={width}
+              y1={y(v)}
+              y2={y(v)}
+              stroke="var(--line)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+            <text
+              x={0}
+              y={y(v) - 4}
+              fill="var(--ink-3)"
+              fontSize={11}
+              style={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {money(v)}
+            </text>
+          </g>
+        ))}
+        {hasGap && <path d={band(points) ?? ""} fill="var(--shared)" />}
         <path
           d={stroke(points) ?? ""}
           fill="none"
-          stroke="var(--mint)"
+          stroke="var(--data)"
           strokeWidth={2}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
@@ -99,12 +126,31 @@ export function SpendChart({
           <path
             d={mineStroke(points) ?? ""}
             fill="none"
-            stroke="var(--ink-2)"
+            stroke="var(--ink-3)"
             strokeWidth={2}
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
           />
         )}
+        {/* The endpoint is the figure the KPI above states, so it is marked. */}
+        <circle cx={x(last.t)} cy={y(last.cash)} r={4} fill="var(--data)" />
+        <text
+          x={0}
+          y={height - 4}
+          fill="var(--ink-3)"
+          fontSize={11}
+        >
+          {dayLabel(points[0]!.t)}
+        </text>
+        <text
+          x={width}
+          y={height - 4}
+          fill="var(--ink-3)"
+          fontSize={11}
+          textAnchor="end"
+        >
+          {dayLabel(last.t)}
+        </text>
       </svg>
       <div className="chart-legend">
         <span>
@@ -122,13 +168,29 @@ export function SpendChart({
   );
 }
 
-/** Proportion bar used in the category breakdown. Solid is your share, the
- *  sand remainder is what other people covered. */
-export function ProportionBar({ share, cash }: { share: Cents; cash: Cents }) {
-  const pct = cash === 0 ? 0 : Math.max(0, Math.min(100, (share / cash) * 100));
+/**
+ * Category bar. Length is the category against the largest one, so the ranking
+ * is visible without reading a single figure; the solid part of that length is
+ * your share and the remainder is what other people covered. Encoding only the
+ * share made every bar full whenever nothing was split, which is a rule, not a
+ * chart.
+ */
+export function ProportionBar({
+  share,
+  cash,
+  max,
+}: {
+  share: Cents;
+  cash: Cents;
+  max: Cents;
+}) {
+  const width = max === 0 ? 0 : Math.max(2, Math.min(100, (Math.abs(cash) / Math.abs(max)) * 100));
+  const mine = cash === 0 ? 0 : Math.max(0, Math.min(100, (share / cash) * 100));
   return (
     <div className="bar" aria-hidden="true">
-      <i style={{ width: `${pct}%` }} />
+      <i style={{ width: `${width}%` }}>
+        <b style={{ width: `${mine}%` }} />
+      </i>
     </div>
   );
 }

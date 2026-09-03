@@ -27,6 +27,7 @@ export function Overview({
   const categories = categoryTotals(L.ledger, period);
   const spend = spendIn(L.ledger, period);
   const attention = needsAttention(L.ledger, L.today);
+  const maxCash = categories.reduce((m, c) => (c.cashOut > m ? c.cashOut : m), cents(1));
 
   // Surface a cached analysis for this period without asking a model anything.
   useEffect(() => {
@@ -63,12 +64,22 @@ export function Overview({
         </div>
 
         <section className="panel">
-          <h2 className="panel-title">Cumulative spend</h2>
+          <div className="panel-head">
+            <h2 className="panel-title">Cumulative spend</h2>
+            <p className="panel-sub">
+              Total paid against your share across {period ? monthLabel(period) : "every imported month"}
+            </p>
+          </div>
           <SpendChart transactions={spend} claims={L.ledger.claims} />
         </section>
 
         <section className="panel">
-          <h2 className="panel-title">Where it went</h2>
+          <div className="panel-head">
+            <h2 className="panel-title">Where it went</h2>
+            <p className="panel-sub">
+              Ranked by size; the solid part of each bar is your share
+            </p>
+          </div>
           {categories.map((c) => (
             <button
               className="cat-row"
@@ -86,7 +97,7 @@ export function Overview({
                   )}
                 </span>
               </span>
-              <ProportionBar share={c.yourShare} cash={c.cashOut} />
+              <ProportionBar share={c.yourShare} cash={c.cashOut} max={maxCash} />
             </button>
           ))}
           {categories.length === 0 && (
@@ -100,7 +111,10 @@ export function Overview({
 
         {attention.length > 0 && (
           <section className="panel attention">
-            <h2 className="panel-title">Needs a look</h2>
+            <div className="panel-head">
+              <h2 className="panel-title">Needs a look</h2>
+              <p className="panel-sub">Things the ledger cannot settle on its own</p>
+            </div>
             {attention.map((item) => (
               <button
                 className="row"

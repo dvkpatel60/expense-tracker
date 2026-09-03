@@ -105,7 +105,10 @@ export function ImportView({ L }: { L: UseLedger }) {
       <div className="import-col">
         {L.ledger.accounts.length > 0 && (
           <section className="panel">
-            <h2 className="panel-title">Accounts</h2>
+            <div className="panel-head">
+              <h2 className="panel-title">Accounts</h2>
+              <p className="panel-sub">Transactions held per imported export</p>
+            </div>
             {L.ledger.accounts.map((a) => (
               <div className="row" key={a.id}>
                 <div className="row-body">
@@ -140,7 +143,10 @@ function MerchantLookup({ L }: { L: UseLedger }) {
 
   return (
     <section className="panel">
-      <h2 className="panel-title">AI provider</h2>
+      <div className="panel-head">
+        <h2 className="panel-title">AI provider</h2>
+        <p className="panel-sub">Used for merchant identification and Overview analysis</p>
+      </div>
 
       {usable.length === 0 ? (
         <div className="row">

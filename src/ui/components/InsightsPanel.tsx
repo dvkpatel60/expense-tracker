@@ -25,17 +25,23 @@ export function InsightsPanel({
   const direct = import.meta.env.VITE_ENRICH_MODE === "direct";
   const configured = direct || L.enrichment !== null;
   const headline = L.insights?.find((i) => i.kind === "headline") ?? null;
-  const rest = (L.insights ?? []).filter((i) => i.kind !== "headline");
+  const actions = (L.insights ?? []).filter((i) => i.kind === "action");
+  const observed = (L.insights ?? []).filter(
+    (i) => i.kind !== "headline" && i.kind !== "action"
+  );
 
   return (
     <section className="panel insights-panel">
       <div className="insights-head">
         <h2 className="panel-title">
-          <span className="spark">◆</span>
+          <span className="spark" aria-hidden="true">✦</span>
           Analysis
+          {L.insights && L.insights.length > 0 && (
+            <span className="insights-count">{L.insights.length}</span>
+          )}
         </h2>
         <button
-          className="btn-mint"
+          className="btn-primary"
           disabled={!configured || L.insightsBusy || L.ledger.transactions.length === 0}
           onClick={() => void L.generateInsights(period)}
         >
@@ -57,9 +63,22 @@ export function InsightsPanel({
       ) : (
         <>
           {headline && <div className="headline">{headline.text}</div>}
-          {rest.map((insight, i) => (
-            <InsightRow key={i} insight={insight} onGoto={onGoto} />
-          ))}
+          {actions.length > 0 && (
+            <div className="insight-group">
+              <span className="eyebrow">Needs action</span>
+              {actions.map((insight, i) => (
+                <InsightRow key={i} insight={insight} onGoto={onGoto} />
+              ))}
+            </div>
+          )}
+          {observed.length > 0 && (
+            <div className="insight-group">
+              <span className="eyebrow">Observed</span>
+              {observed.map((insight, i) => (
+                <InsightRow key={i} insight={insight} onGoto={onGoto} />
+              ))}
+            </div>
+          )}
           {L.insights.length === 0 && (
             <div className="insights-empty">The model had nothing notable to report.</div>
           )}
@@ -81,30 +100,35 @@ function InsightRow({
   insight: Insight;
   onGoto(view: View, intent?: ActivityIntent): void;
 }) {
-  const body = (
-    <>
-      <span className="insight-tags">
-        <span className={`insight-kind ${insight.kind}`}>{insight.kind}</span>
-        {insight.categoryId && (
-          <span className="chip">
-            <i style={{ background: categoryColor(insight.categoryId) }} />
-            {insight.categoryId}
-          </span>
-        )}
-      </span>
-      {insight.text}
-    </>
+  const tags = (
+    <span className="insight-tags">
+      <i className={`insight-dot ${insight.kind}`} aria-hidden="true" />
+      <span className="insight-kind">{insight.kind}</span>
+      {insight.categoryId && (
+        <span className="chip">
+          <i style={{ background: categoryColor(insight.categoryId) }} />
+          {insight.categoryId}
+        </span>
+      )}
+    </span>
   );
 
   if (!insight.categoryId) {
-    return <div className="insight">{body}</div>;
+    return (
+      <div className="insight">
+        {tags}
+        {insight.text}
+      </div>
+    );
   }
   return (
     <button
       className="insight"
       onClick={() => onGoto("activity", { kind: "all", categoryId: insight.categoryId! })}
     >
-      {body}
+      {tags}
+      {insight.text}
+      <span className="insight-link">Show these transactions &rarr;</span>
     </button>
   );
 }

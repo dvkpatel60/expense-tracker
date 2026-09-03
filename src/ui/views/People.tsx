@@ -63,7 +63,7 @@ export function People({
           </section>
         ))}
       </div>
-      <p className="fine">
+      <p className="fine" style={{ marginTop: "1rem" }}>
         One transfer settles a whole balance. If someone owes you for dinner and you owe them
         for a fare, the difference is what needs to move.
       </p>
