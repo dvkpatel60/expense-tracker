@@ -9,6 +9,7 @@ import { pairInternalTransfers } from "./pairing.js";
 import { computeSplit, effectiveAmount, netPosition, proposeSettlement } from "./split.js";
 import type {
   Account,
+  AccountKind,
   CategoryId,
   CategoryRule,
   Claim,
@@ -236,6 +237,29 @@ export function setCategory(
 }
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Editable account fields. Absent keys keep their stored value. */
+export interface AccountPatch {
+  label?: string;
+  kind?: AccountKind;
+  creditLimit?: Cents;
+  openingBalance?: Cents;
+}
+
+/** Relabel an account or correct its kind or credit limits. Account ids are
+ *  derived from the import label, so renaming only changes the display name;
+ *  the id — and every transaction's accountId — is left alone. */
+export function editAccount(
+  state: LedgerState,
+  accountId: string,
+  patch: AccountPatch
+): LedgerState {
+  if (!state.accounts.some((a) => a.id === accountId)) return state;
+  return {
+    ...state,
+    accounts: state.accounts.map((a) => (a.id === accountId ? { ...a, ...patch } : a)),
+  };
+}
 
 export function applyMerchantFacts(
   state: LedgerState,

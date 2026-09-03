@@ -1,6 +1,10 @@
-import { ACCOUNT_KIND_LABEL, isAsset, utilisation } from "../../core/accounts.js";
+import { useState } from "react";
+import { ACCOUNT_KINDS, ACCOUNT_KIND_LABEL, isAsset, utilisation } from "../../core/accounts.js";
+import type { AccountKind } from "../../core/types.js";
+import { cents } from "../../core/money.js";
 import { balanceSheet } from "../../core/statement.js";
 import type { AccountStatement } from "../../core/statement.js";
+import type { AccountPatch } from "../../core/ledger.js";
 import { dollars, dollarsAbs, monthLabel } from "../format.js";
 import type { UseLedger } from "../useLedger.js";
 
@@ -22,7 +26,7 @@ export function Accounts({ L, period }: { L: UseLedger; period: string | null })
 
       <div className="people-grid" style={{ marginTop: "0.85rem" }}>
         {sheet.accounts.map((s) => (
-          <AccountCard key={s.account.id} statement={s} />
+          <AccountCard key={s.account.id} statement={s} L={L} />
         ))}
       </div>
     </>
@@ -70,8 +74,106 @@ export function BalanceSheetPanel({ L, period }: { L: UseLedger; period: string 
   );
 }
 
-function AccountCard({ statement: s }: { statement: AccountStatement }) {
+function AccountCard({ statement: s, L }: { statement: AccountStatement; L: UseLedger }) {
   const used = utilisation(s.account, s.closing);
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(s.account.label);
+  const [kind, setKind] = useState<AccountKind>(s.account.kind);
+  const [creditLimit, setCreditLimit] = useState(
+    s.account.creditLimit != null ? String((s.account.creditLimit / 100).toFixed(2)) : ""
+  );
+  const [openingBalance, setOpeningBalance] = useState(
+    s.account.openingBalance != null ? String((s.account.openingBalance / 100).toFixed(2)) : ""
+  );
+
+  const parseDollars = (v: string): number | null => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? Math.round(n * 100) : null;
+  };
+
+  const save = () => {
+    const patch: AccountPatch = {};
+    const trimmed = label.trim();
+    if (trimmed && trimmed !== s.account.label) patch.label = trimmed;
+    if (kind !== s.account.kind) patch.kind = kind;
+    if (kind === "credit") {
+      const lim = parseDollars(creditLimit);
+      if (lim !== null) patch.creditLimit = cents(lim);
+    }
+    const ob = parseDollars(openingBalance);
+    if (ob !== null) patch.openingBalance = cents(ob);
+    if (Object.keys(patch).length > 0) L.editAccount(s.account.id, patch);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <section className="panel">
+        <div className="person-head">
+          <div className="person-name">Edit account</div>
+        </div>
+        <div className="split-inputs">
+          <div className="split-input">
+            <span className="eyebrow">Label</span>
+            <input
+              className="text-input"
+              style={{ width: "12rem", padding: "0.3rem 0.5rem" }}
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </div>
+          <div className="split-input">
+            <span className="eyebrow">Kind</span>
+            <select
+              className="select"
+              aria-label="Account kind"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as AccountKind)}
+            >
+              {ACCOUNT_KINDS.map((k) => (
+                <option key={k} value={k}>{ACCOUNT_KIND_LABEL[k]}</option>
+              ))}
+            </select>
+          </div>
+          {kind === "credit" && (
+            <div className="split-input">
+              <span className="eyebrow">Credit limit</span>
+              <div>
+                <input
+                  className="num"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="$0.00"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(e.target.value)}
+                />
+                <span className="unit">CAD</span>
+              </div>
+            </div>
+          )}
+          <div className="split-input">
+            <span className="eyebrow">Opening balance</span>
+            <div>
+              <input
+                className="num"
+                type="number"
+                step="0.01"
+                placeholder="$0.00"
+                value={openingBalance}
+                onChange={(e) => setOpeningBalance(e.target.value)}
+              />
+              <span className="unit">CAD</span>
+            </div>
+          </div>
+        </div>
+        <div className="btn-stack">
+          <button className="btn" disabled={!label.trim()} onClick={save}>Save</button>
+          <button className="btn secondary" onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="panel">
@@ -83,9 +185,24 @@ function AccountCard({ statement: s }: { statement: AccountStatement }) {
             {s.transactionCount === 1 ? "transaction" : "transactions"}
           </div>
         </div>
-        <span className={`bal-net ${isAsset(s.account.kind) ? "owed" : "owing"}`}>
-          {dollarsAbs(s.closing)}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <span className={`bal-net ${isAsset(s.account.kind) ? "owed" : "owing"}`}>
+            {dollarsAbs(s.closing)}
+          </span>
+          <button
+            className="item-remove"
+            aria-label="Edit account"
+            onClick={() => {
+              setLabel(s.account.label);
+              setKind(s.account.kind);
+              setCreditLimit(s.account.creditLimit != null ? String((s.account.creditLimit / 100).toFixed(2)) : "");
+              setOpeningBalance(s.account.openingBalance != null ? String((s.account.openingBalance / 100).toFixed(2)) : "");
+              setEditing(true);
+            }}
+          >
+            ✎
+          </button>
+        </div>
       </div>
 
       {used !== null && (

@@ -3,13 +3,14 @@ import {
   applyMerchantFacts,
   applySplit,
   clearSplit,
+  editAccount as editAccountTransition,
   emptyLedger,
   importRows,
   setCategory,
   settle,
   systemClock,
 } from "../core/ledger.js";
-import type { ImportReport, LedgerState } from "../core/ledger.js";
+import type { AccountPatch, ImportReport, LedgerState } from "../core/ledger.js";
 import { parseStatement } from "../parsers/index.js";
 import { load, save } from "../store/store.js";
 import { browserStore } from "./storage.js";
@@ -48,6 +49,8 @@ export interface UseLedger {
   chooseProvider(provider: string): void;
   chooseModel(model: string): void;
   importText(text: string, label: string, kind: AccountKind, fi?: FiId): ImportReport | null;
+  /** Edit an account's label, kind, credit limit or opening balance. */
+  editAccount(accountId: string, patch: AccountPatch): void;
   loadSamples(
     samples: readonly { label: string; fi: FiId; kind: AccountKind; text: string }[]
   ): void;
@@ -195,6 +198,10 @@ export function useLedger(): UseLedger {
     });
   }, []);
 
+  const editAccount = useCallback((accountId: string, patch: AccountPatch) => {
+    setLedger((prev) => editAccountTransition(prev, accountId, patch));
+  }, []);
+
   const chooseProvider = useCallback(
     (provider: string) => {
       const spec = providers.find((p) => p.id === provider);
@@ -332,6 +339,7 @@ export function useLedger(): UseLedger {
     split,
     unsplit,
     reconcile,
+    editAccount,
     identifyMerchants,
     insights,
     insightsBusy,

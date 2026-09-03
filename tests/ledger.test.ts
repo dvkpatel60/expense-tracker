@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { cents } from "../src/core/money.js";
 import {
-  applyMerchantFacts, applySplit, categoryTotals, counterClock, emptyLedger,
+  applyMerchantFacts, applySplit, categoryTotals, counterClock, editAccount, emptyLedger,
   importRows, needsAttention, periodTotals, personBalances, setCategory, settle, spendIn,
 } from "../src/core/ledger.js";
 import type { LedgerState } from "../src/core/ledger.js";
@@ -185,5 +185,51 @@ describe("attention queue", () => {
     const kinds = items.map((i) => i.kind);
     expect(kinds).toContain("unidentified_merchant");
     expect(kinds).toContain("unmatched_transfer");
+  });
+});
+
+describe("editAccount", () => {
+  it("relabels an account", () => {
+    const state = loadAll();
+    const rbc = state.accounts.find((a) => a.id === "acct:rbc")!;
+    expect(rbc.label).toBe("RBC Chequing");
+    const updated = editAccount(state, "acct:rbc", { label: "RBC Daily" });
+    expect(updated.accounts.find((a) => a.id === "acct:rbc")!.label).toBe("RBC Daily");
+    // The original is untouched.
+    expect(state.accounts.find((a) => a.id === "acct:rbc")!.label).toBe("RBC Chequing");
+  });
+
+  it("changes account kind and credit limit", () => {
+    const state = loadAll();
+    const scotia = state.accounts.find((a) => a.id === "acct:scotia")!;
+    expect(scotia.kind).toBe("credit");
+    const updated = editAccount(state, "acct:scotia", { kind: "savings", creditLimit: cents(50000) });
+    const changed = updated.accounts.find((a) => a.id === "acct:scotia")!;
+    expect(changed.kind).toBe("savings");
+    expect(changed.creditLimit).toBe(cents(50000));
+  });
+
+  it("sets opening balance on an account that had none", () => {
+    const state = loadAll();
+    const ws = state.accounts.find((a) => a.id === "acct:ws")!;
+    expect(ws.openingBalance).toBeUndefined();
+    const updated = editAccount(state, "acct:ws", { openingBalance: cents(25000) });
+    expect(updated.accounts.find((a) => a.id === "acct:ws")!.openingBalance).toBe(cents(25000));
+  });
+
+  it("leaves unrelated accounts untouched", () => {
+    const state = loadAll();
+    const before = state.accounts.map((a) => ({ ...a }));
+    const updated = editAccount(state, "acct:rbc", { label: "Changed" });
+    expect(updated.accounts).toHaveLength(before.length);
+    // The other two are identical references.
+    expect(updated.accounts.find((a) => a.id === "acct:scotia")).toBe(state.accounts.find((a) => a.id === "acct:scotia"));
+    expect(updated.accounts.find((a) => a.id === "acct:ws")).toBe(state.accounts.find((a) => a.id === "acct:ws"));
+  });
+
+  it("returns the same state when the account id is unknown", () => {
+    const state = loadAll();
+    const result = editAccount(state, "acct:nonexistent", { label: "Nope" });
+    expect(result).toBe(state);
   });
 });
