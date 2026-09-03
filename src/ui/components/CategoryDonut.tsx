@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { arc, pie } from "d3-shape";
-import type { GroupTotal } from "../../core/ledger.js";
-import type { CategoryTotal } from "../../core/ledger.js";
+import type { SpendCategory, SpendGroup } from "../../core/ledger.js";
 import { cents } from "../../core/money.js";
 import type { Cents } from "../../core/money.js";
 import { categoryColor, dollarsAbs, groupColor } from "../format.js";
@@ -31,16 +30,16 @@ export function CategoryDonut({
   onDrill,
   size = 220,
 }: {
-  groups: readonly GroupTotal[];
+  groups: readonly SpendGroup[];
   /** When set, the ring shows this group's categories instead of the groups. */
-  drilled: GroupTotal | null;
-  onDrill(group: GroupTotal | null): void;
+  drilled: SpendGroup | null;
+  onDrill(group: SpendGroup | null): void;
   size?: number;
 }) {
   const slices = useMemo<Slice[]>(() => {
     if (drilled) {
       return drilled.categories
-        .filter((c: CategoryTotal) => c.yourShare > 0)
+        .filter((c: SpendCategory) => c.yourShare > 0)
         .map((c) => ({
           key: c.categoryId,
           label: c.categoryId,
@@ -125,6 +124,6 @@ export function CategoryDonut({
   );
 }
 
-function groupFor(groups: readonly GroupTotal[], key: string): GroupTotal | null {
+function groupFor(groups: readonly SpendGroup[], key: string): SpendGroup | null {
   return groups.find((g) => g.groupId === key) ?? null;
 }

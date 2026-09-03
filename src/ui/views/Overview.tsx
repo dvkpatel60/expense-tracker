@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { categoryTotals, groupTotals, needsAttention, periodTotals, spendIn, avgTransactionTotal, spendingVelocity, settlementRate, topCategoryDelta } from "../../core/ledger.js";
-import type { GroupTotal } from "../../core/ledger.js";
+import { categoryTotals, buildSpendTree, needsAttention, periodTotals, spendIn, avgTransactionTotal, spendingVelocity, settlementRate, topCategoryDelta } from "../../core/ledger.js";
+import type { GroupTotal, SpendGroup } from "../../core/ledger.js";
 import { detectRecurring } from "../../core/recurring.js";
 import { previousPeriod } from "../../core/digest.js";
 import { cents } from "../../core/money.js";
@@ -28,22 +28,23 @@ export function Overview({
 }) {
   const totals = periodTotals(L.ledger, period);
   const previous = period === null ? null : periodTotals(L.ledger, previousPeriod(period));
+  const tree = buildSpendTree(L.ledger, period);
   const categories = categoryTotals(L.ledger, period);
   const spend = spendIn(L.ledger, period);
   const attention = needsAttention(L.ledger, L.today);
-  const groups = groupTotals(L.ledger, period);
   const avg = avgTransactionTotal(L.ledger, period);
   const velocity = spendingVelocity(L.ledger, period);
   const settleRate = settlementRate(L.ledger);
   const top = period === null ? null : topCategoryDelta(L.ledger, period);
   const recurring = detectRecurring(L.ledger, period);
-  const [drilled, setDrilled] = useState<GroupTotal | null>(null);
+  const [drilled, setDrilled] = useState<SpendGroup | null>(null);
   const [lens, setLens] = useState<{ categoryId: string; anchor: DOMRect } | null>(null);
 
   // The ranked list follows the ring: drilled into a group, it lists that
-  // group's categories, so the two halves of the panel never disagree.
+  // group's categories, so the two halves of the panel never disagree. Both the
+  // ring and the list read the same buildSpendTree pass.
   const listed = drilled
-    ? (groups.find((g) => g.groupId === drilled.groupId)?.categories ?? [])
+    ? (tree.find((g) => g.groupId === drilled.groupId)?.categories ?? [])
     : categories;
   const maxCash = listed.reduce((m, c) => (c.cashOut > m ? c.cashOut : m), cents(1));
 
@@ -134,7 +135,7 @@ export function Overview({
           </div>
 
           <div className="breakdown">
-            <CategoryDonut groups={groups} drilled={drilled} onDrill={setDrilled} />
+            <CategoryDonut groups={tree} drilled={drilled} onDrill={setDrilled} />
 
             <div className="breakdown-list">
           {listed.map((c) => (

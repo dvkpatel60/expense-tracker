@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cents } from "../src/core/money.js";
+import { cents, sum } from "../src/core/money.js";
 import {
-  applyMerchantFacts, applySplit, avgTransactionTotal, categoryTotals, counterClock,
+  applyMerchantFacts, applySplit, avgTransactionTotal, buildSpendTree, categoryTotals, counterClock,
   editAccount, emptyLedger, exportCsv, importRows, mergePeople, needsAttention, periodTotals,
   personBalances, setCategory, settle, spendIn, spendingVelocity, settlementRate,
   splitSharePercent, topCategoryDelta, unmergePerson,
@@ -540,5 +540,46 @@ describe("exportCsv (task-10)", () => {
     const state: LedgerState = { ...emptyLedger(), people, transactions: [tx] };
     const csv = exportCsv(state, { format: "summary", period: null });
     expect(csv).toContain("Sarah McKenna");
+  });
+});
+
+describe("buildSpendTree (task-12)", () => {
+  it("agrees with categoryTotals and groupTotals for a seeded ledger", () => {
+    const state = loadAll();
+    const tree = buildSpendTree(state, null);
+    // Same totals as the flattened list.
+    const catFlatten = tree.flatMap((g) => g.categories);
+    for (const c of categoryTotals(state, null)) {
+      const node = catFlatten.find((n) => n.categoryId === c.categoryId);
+      expect(node).toBeDefined();
+      expect(node!.yourShare).toBe(c.yourShare);
+      expect(node!.cashOut).toBe(c.cashOut);
+      expect(node!.transactionCount).toBe(c.transactionCount);
+    }
+    // Every group has its category total reconcile to the group total.
+    for (const g of tree) {
+      expect(g.yourShare).toBe(cents(sum(g.categories.map((c) => c.yourShare))));
+    }
+  });
+
+  it("tags each category with its group and per-merchant totals", () => {
+    const state = loadAll();
+    const tree = buildSpendTree(state, null);
+    const grocery = tree
+      .flatMap((g) => g.categories)
+      .find((c) => c.categoryId === "Groceries");
+    expect(grocery).toBeDefined();
+    // Its group carries it, per the category→group mapping.
+    expect(tree.some((g) => g.groupId === grocery!.groupId && g.categories.includes(grocery!))).toBe(true);
+    // merchantTotals reconstruct the category's yourShare.
+    expect(cents(sum(Object.values(grocery!.merchantTotals)))).toBe(grocery!.yourShare);
+  });
+
+  it("keeps groups ordered by your share, descending", () => {
+    const state = loadAll();
+    const tree = buildSpendTree(state, null);
+    for (let i = 1; i < tree.length; i++) {
+      expect(tree[i]!.yourShare).toBeLessThanOrEqual(tree[i - 1]!.yourShare);
+    }
   });
 });

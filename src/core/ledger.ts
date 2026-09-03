@@ -402,21 +402,88 @@ export function periodTotals(state: LedgerState, period: string | null): PeriodT
   };
 }
 
-export function categoryTotals(state: LedgerState, period: string | null): CategoryTotal[] {
-  const buckets = new Map<CategoryId, { cash: number; eff: number; n: number }>();
+/**
+ * One fully-aggregated pass over a period's spend. This is the single source
+ * the donut, the ranked list and the lens all read, so the ring and the list
+ * can never drift — the same failure the app already guards against by making
+ * groupTotals derive from categoryTotals instead of re-totalling the
+ * transactions. The lens only uses the categoryIds/totals to know what is a
+ * category; it still pages the raw transactions for row content.
+ */
+export interface SpendCategory {
+  readonly categoryId: CategoryId;
+  readonly groupId: GroupId;
+  readonly cashOut: Cents;
+  readonly yourShare: Cents;
+  readonly transactionCount: number;
+  /** Per-merchant totals inside the category, keyed by merchant key. */
+  readonly merchantTotals: Readonly<Record<string, Cents>>;
+}
+
+export interface SpendGroup {
+  readonly groupId: GroupId;
+  readonly cashOut: Cents;
+  readonly yourShare: Cents;
+  readonly transactionCount: number;
+  /** The categories inside it, already sorted, so a drill-down needs no second pass. */
+  readonly categories: readonly SpendCategory[];
+}
+
+export function buildSpendTree(state: LedgerState, period: string | null): SpendGroup[] {
+  const byCategory = new Map<CategoryId, { cash: number; eff: number; n: number; merchants: Map<string, number> }>();
   for (const t of spendIn(state, period)) {
-    const b = buckets.get(t.categoryId) ?? { cash: 0, eff: 0, n: 0 };
+    const b = byCategory.get(t.categoryId) ?? { cash: 0, eff: 0, n: 0, merchants: new Map() };
     b.cash += -t.amount;
     b.eff += -effectiveAmount(t, state.claims);
     b.n++;
-    buckets.set(t.categoryId, b);
+    b.merchants.set(t.merchantKey, (b.merchants.get(t.merchantKey) ?? 0) + -effectiveAmount(t, state.claims));
+    byCategory.set(t.categoryId, b);
   }
-  return [...buckets.entries()]
-    .map(([categoryId, b]) => ({
+
+  const byGroup = new Map<GroupId, SpendCategory[]>();
+  for (const [categoryId, b] of byCategory) {
+    const groupId = groupOf(categoryId);
+    const merchantTotals: Record<string, Cents> = {};
+    for (const [key, val] of b.merchants) merchantTotals[key] = cents(val);
+    const cat: SpendCategory = {
       categoryId,
+      groupId,
       cashOut: cents(b.cash),
       yourShare: cents(b.eff),
       transactionCount: b.n,
+      merchantTotals,
+    };
+    const bucket = byGroup.get(groupId);
+    if (bucket) bucket.push(cat);
+    else byGroup.set(groupId, [cat]);
+  }
+
+  return [...byGroup.entries()]
+    .map(([groupId, categories]) => {
+      categories.sort((a, b) => b.yourShare - a.yourShare);
+      return {
+        groupId,
+        cashOut: cents(sum(categories.map((c) => c.cashOut))),
+        yourShare: cents(sum(categories.map((c) => c.yourShare))),
+        transactionCount: categories.reduce((n, c) => n + c.transactionCount, 0),
+        categories,
+      };
+    })
+    .sort((a, b) => b.yourShare - a.yourShare);
+}
+
+/** The per-category slice of buildSpendTree, flattened and sorted. Kept as a
+ *  distinct public shape for callers that want the plain list; built from the
+ *  tree so it can never disagree with it. */
+export function categoryTotals(state: LedgerState, period: string | null): CategoryTotal[] {
+  const groups = buildSpendTree(state, period);
+  return groups
+    .flatMap((g) => g.categories)
+    .map((c) => ({
+      categoryId: c.categoryId,
+      cashOut: c.cashOut,
+      yourShare: c.yourShare,
+      transactionCount: c.transactionCount,
     }))
     .sort((a, b) => b.yourShare - a.yourShare);
 }
@@ -428,6 +495,24 @@ export interface GroupTotal {
   readonly transactionCount: number;
   /** The categories inside it, already sorted, so a drill-down needs no second pass. */
   readonly categories: readonly CategoryTotal[];
+}
+
+/** The same report as categoryTotals, one level up. Built from it rather than
+ *  from the transactions again, so the two can never disagree. */
+export function groupTotals(state: LedgerState, period: string | null): GroupTotal[] {
+  const groups = buildSpendTree(state, period);
+  return groups.map((g) => ({
+    groupId: g.groupId,
+    cashOut: g.cashOut,
+    yourShare: g.yourShare,
+    transactionCount: g.transactionCount,
+    categories: g.categories.map((c) => ({
+      categoryId: c.categoryId,
+      cashOut: c.cashOut,
+      yourShare: c.yourShare,
+      transactionCount: c.transactionCount,
+    })),
+  }));
 }
 
 /** Richer KPIs: per-transaction and per-day spend, plus the share of claims
@@ -499,27 +584,6 @@ export function topCategoryDelta(
 
 function distinctDays(dates: readonly string[]): number {
   return new Set(dates).size;
-}
-
-/** The same report as categoryTotals, one level up. Built from it rather than
- *  from the transactions again, so the two can never disagree. */
-export function groupTotals(state: LedgerState, period: string | null): GroupTotal[] {
-  const buckets = new Map<GroupId, CategoryTotal[]>();
-  for (const c of categoryTotals(state, period)) {
-    const group = groupOf(c.categoryId);
-    const bucket = buckets.get(group);
-    if (bucket) bucket.push(c);
-    else buckets.set(group, [c]);
-  }
-  return [...buckets.entries()]
-    .map(([groupId, categories]) => ({
-      groupId,
-      cashOut: cents(sum(categories.map((c) => c.cashOut))),
-      yourShare: cents(sum(categories.map((c) => c.yourShare))),
-      transactionCount: categories.reduce((n, c) => n + c.transactionCount, 0),
-      categories,
-    }))
-    .sort((a, b) => b.yourShare - a.yourShare);
 }
 
 export interface PersonBalance {
