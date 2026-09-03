@@ -605,6 +605,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 .insight-dot.trend { background: var(--accent); }
 .insight-dot.anomaly { background: var(--amber); }
 .insight-dot.habit { background: var(--purple); }
+.insight-dot.savings { background: var(--green); }
 .insight-dot.action { background: var(--green); }
 .insight-kind {
   font-size: var(--step--2);

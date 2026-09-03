@@ -89,4 +89,46 @@ describe("insights digest", () => {
   it("has no previous period to compare against for all time", () => {
     expect(buildInsightsDigest(seeded(), null).previousTotals).toBeNull();
   });
+
+  it("adds no day-level dates, names or counterparties in the new recurring/savings/delta fields", () => {
+    const state = seeded();
+    const serialized = JSON.stringify(buildInsightsDigest(state, null));
+    // The new fields must obey the same boundary as everything else.
+    expect(serialized).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(serialized).not.toContain("etransfer:");
+    for (const person of state.people) {
+      expect(serialized).not.toContain(person.displayName);
+    }
+  });
+
+  it("reports recurring candidates with cadence and regularity, no expected date", () => {
+    const digest = buildInsightsDigest(seeded(), null);
+    for (const r of digest.recurringCandidates) {
+      expect(r.merchant).not.toMatch(/^\d{4}-\d{2}-\d{2}/);
+      expect(["monthly", "weekly"]).toContain(r.frequency);
+      expect(r.regularity).toBeGreaterThanOrEqual(0);
+      expect(r.regularity).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("reports savings opportunities only where your share exceeds the cash out", () => {
+    const digest = buildInsightsDigest(seeded(), null);
+    for (const s of digest.savingsOpportunity) {
+      expect(s.yourShare).toBeGreaterThan(s.cashOut);
+      expect(s.potentialSavings).toBe(s.yourShare - s.cashOut);
+    }
+  });
+
+  it("builds merchant deltas only when a previous period exists", () => {
+    const allTime = buildInsightsDigest(seeded(), null);
+    expect(allTime.topMerchantDelta).toHaveLength(0);
+
+    const monthly = buildInsightsDigest(seeded(), "2026-08");
+    // May be empty if no merchant moved, but must be a bounded array never
+    // carrying counterparty keys.
+    expect(monthly.topMerchantDelta.length).toBeLessThanOrEqual(5);
+    for (const m of monthly.topMerchantDelta) {
+      expect(m.merchant).not.toContain("etransfer:");
+    }
+  });
 });

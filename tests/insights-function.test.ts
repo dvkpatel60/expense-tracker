@@ -23,6 +23,9 @@ const digest: InsightsDigest = {
   ],
   topMerchants: [{ merchant: "LA CARNITA COLLEGE", yourShare: cents(10730), transactionCount: 1 }],
   openClaims: { count: 2, total: cents(15000) },
+  recurringCandidates: [],
+  savingsOpportunity: [],
+  topMerchantDelta: [],
 };
 
 const post = (body: unknown): Request =>

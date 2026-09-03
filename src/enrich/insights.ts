@@ -11,7 +11,7 @@ import type { CategoryId } from "../core/types.js";
  * facts.ts do: two copies of a contract is how the two ends drift apart.
  */
 
-export type InsightKind = "headline" | "trend" | "anomaly" | "habit" | "action";
+export type InsightKind = "headline" | "trend" | "anomaly" | "habit" | "savings" | "action";
 
 export interface Insight {
   readonly kind: InsightKind;
@@ -20,7 +20,7 @@ export interface Insight {
   readonly categoryId?: CategoryId;
 }
 
-const KINDS = new Set<string>(["headline", "trend", "anomaly", "habit", "action"]);
+const KINDS = new Set<string>(["headline", "trend", "anomaly", "habit", "savings", "action"]);
 
 /** One headline plus a handful of observations. More is a report, not insight. */
 export const MAX_INSIGHTS = 8;
@@ -68,16 +68,44 @@ export function buildInsightsPrompt(digest: InsightsDigest): string {
     lines.push(`- ${m.merchant}: ${dollars(m.yourShare)} / ${m.transactionCount}`);
   }
 
-  return `You are analyzing one person's spending summary. "Own spend" already excludes what friends owe them back. Amounts are Canadian dollars.
+  if (digest.recurringCandidates.length > 0) {
+    lines.push("", "Recurring merchants (avg amount / cadence / regularity 0-1):");
+    for (const r of digest.recurringCandidates) {
+      lines.push(
+        `- ${r.merchant}: ${dollars(r.avgAmount)} / ${r.frequency} / ${r.regularity.toFixed(2)}`
+      );
+    }
+  }
 
+  if (digest.savingsOpportunity.length > 0) {
+    lines.push(
+      "",
+      "Savings opportunities — categories where your share exceeds the cash out (you carry more than everyone else's share):"
+    );
+    for (const s of digest.savingsOpportunity) {
+      lines.push(
+        `- ${s.categoryId}: your share ${dollars(s.yourShare)} vs ${dollars(s.cashOut)} paid out, ${dollars(s.potentialSavings)} recoverable from others`
+      );
+    }
+  }
+
+  if (digest.topMerchantDelta.length > 0) {
+    lines.push("", "Merchants that moved most (current share / previous share):");
+    for (const m of digest.topMerchantDelta) {
+      lines.push(`- ${m.merchant}: ${dollars(m.currentShare)} / ${dollars(m.previousShare)}`);
+    }
+  }
+
+  return `You are analyzing one person's spending summary. "Own spend" already excludes what friends owe them back. Amounts are Canadian dollars.
+ 
 ${lines.join("\n")}
 
 Write at most ${MAX_INSIGHTS} insights. Respond with ONLY a JSON array, no preamble and no code fences. Each element:
-{"kind":"<headline|trend|anomaly|habit|action>","text":"<one sentence, specific, cite figures>","categoryId":"<optional, one of: ${CATEGORIES.join(", ")}>"}
+{"kind":"<headline|trend|anomaly|habit|savings|action>","text":"<one sentence, specific, cite figures>","categoryId":"<optional, one of: ${CATEGORIES.join(", ")}>"}
 
 Attach categoryId whenever an insight is about one category, so it can be linked to those transactions.
 Exactly one element must have kind "headline": the single most useful thing to know about this period, under 20 words.
-"trend" compares against the previous period. "anomaly" flags something unusual for one merchant or category. "habit" names a recurring pattern. "action" suggests one concrete, non-judgmental step.
+"trend" compares against the previous period. "anomaly" flags something unusual for one merchant or category. "habit" names a recurring pattern from the recurring list. "savings" points at a savings opportunity — a category where friends owe you back — and should suggest one concrete way to recover that money. "action" suggests one concrete, non-judgmental step.
 Do not moralize, do not pad, and skip any kind you have nothing real to say for.`;
 }
 
@@ -161,6 +189,41 @@ export function validateDigest(value: unknown): string | null {
   const claims = d["openClaims"] as Record<string, unknown> | null;
   if (typeof claims !== "object" || claims === null || !finite(claims["count"]) || !finite(claims["total"]))
     return "openClaims must be aggregate count and total.";
+
+  const recurring = d["recurringCandidates"];
+  if (!Array.isArray(recurring) || recurring.length > MAX_DIGEST_MERCHANTS)
+    return "recurringCandidates must be a bounded array.";
+  for (const r of recurring) {
+    const o = r as Record<string, unknown>;
+    if (typeof o !== "object" || o === null) return "recurringCandidates entries must be objects.";
+    if (typeof o["merchant"] !== "string" || !o["merchant"] || (o["merchant"] as string).startsWith("etransfer:"))
+      return "Recurring merchant keys must not be counterparties.";
+    if (!finite(o["avgAmount"]) || (o["frequency"] !== "monthly" && o["frequency"] !== "weekly") || !finite(o["regularity"]))
+      return "Recurring fields must be an amount, a known cadence and a regularity.";
+  }
+
+  const savings = d["savingsOpportunity"];
+  if (!Array.isArray(savings)) return "savingsOpportunity must be an array.";
+  for (const s of savings) {
+    const o = s as Record<string, unknown>;
+    if (typeof o !== "object" || o === null || !valid.has(String(o["categoryId"])))
+      return "savingsOpportunity names an unknown category.";
+    if (![o["yourShare"], o["cashOut"], o["potentialSavings"]].every(finite))
+      return "savingsOpportunity figures must be finite numbers.";
+  }
+
+  const deltas = d["topMerchantDelta"];
+  if (!Array.isArray(deltas) || deltas.length > MAX_DIGEST_MERCHANTS)
+    return "topMerchantDelta must be a bounded array.";
+  for (const m of deltas) {
+    const o = m as Record<string, unknown>;
+    if (typeof o !== "object" || o === null) return "topMerchantDelta entries must be objects.";
+    const key = o["merchant"];
+    if (typeof key !== "string" || !key || (key as string).startsWith("etransfer:"))
+      return "Merchant deltas must not be counterparties.";
+    if (![o["currentShare"], o["previousShare"]].every(finite))
+      return "Merchant delta figures must be finite numbers.";
+  }
 
   return null;
 }

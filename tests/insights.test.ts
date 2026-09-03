@@ -34,6 +34,9 @@ const digest = (over: Partial<InsightsDigest> = {}): InsightsDigest => ({
   ],
   topMerchants: [{ merchant: "LA CARNITA COLLEGE", yourShare: cents(10730), transactionCount: 1 }],
   openClaims: { count: 2, total: cents(15000) },
+  recurringCandidates: [],
+  savingsOpportunity: [],
+  topMerchantDelta: [],
   ...over,
 });
 
@@ -156,5 +159,38 @@ describe("digest validation", () => {
   it("refuses a body that is not a digest at all", () => {
     expect(validateDigest(undefined)).toBeTruthy();
     expect(validateDigest("give me everything")).toBeTruthy();
+  });
+
+  it("refuses a counterparty key in the recurring or delta fields", () => {
+    const badRecurring = digest({
+      recurringCandidates: [
+        { merchant: "etransfer:mckenna|s", avgAmount: cents(100), frequency: "monthly", regularity: 0.9 },
+      ],
+    });
+    expect(validateDigest(badRecurring)).toMatch(/counterpart/i);
+    const badDelta = digest({
+      topMerchantDelta: [
+        { merchant: "etransfer:mckenna|s", currentShare: cents(1), previousShare: cents(0) },
+      ],
+    });
+    expect(validateDigest(badDelta)).toMatch(/counterpart/i);
+  });
+
+  it("refuses a cadence that is not weekly or monthly", () => {
+    const bad = digest({
+      recurringCandidates: [
+        { merchant: "NETFLIX", avgAmount: cents(100), frequency: "annual" as never, regularity: 0.9 },
+      ],
+    });
+    expect(validateDigest(bad)).toMatch(/cadence/i);
+  });
+
+  it("refuses a savings opportunity on an unknown category", () => {
+    const bad = digest({
+      savingsOpportunity: [
+        { categoryId: "Gold Bars" as never, yourShare: cents(1), cashOut: cents(1), potentialSavings: cents(0) },
+      ],
+    });
+    expect(validateDigest(bad)).toMatch(/unknown category/i);
   });
 });
