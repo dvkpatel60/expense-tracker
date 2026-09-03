@@ -1349,6 +1349,10 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 }
 .btn.secondary:hover { background: var(--panel-2); }
 .btn.secondary:disabled { background: var(--panel-2); color: var(--ink-3); border-color: var(--line); }
+/* Destructive confirm only (restore-over, delete). Rose fill, white text
+   (~5.9:1) — the one place an action reads as "this cannot be undone". */
+.btn.danger { background: var(--red); color: #fff; }
+.btn.danger:hover { background: #a01033; }
 .btn-stack { display: grid; gap: 0.5rem; margin-top: 1rem; }
 
 /* Split strategy composer */

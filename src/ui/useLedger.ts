@@ -15,7 +15,7 @@ import {
 } from "../core/ledger.js";
 import type { AccountPatch, ExportOptions, ImportReport, LedgerState } from "../core/ledger.js";
 import { parseStatement } from "../parsers/index.js";
-import { load, save } from "../store/store.js";
+import { load, restoreBackup, save, serializeBackup } from "../store/store.js";
 import { browserStore } from "./storage.js";
 import { enrichMerchants } from "../enrich/enricher.js";
 import { directTransport, requestInsightsDirect } from "../enrich/direct.js";
@@ -56,6 +56,11 @@ export interface UseLedger {
   editAccount(accountId: string, patch: AccountPatch): void;
   /** Serialize the ledger to CSV per the given options. */
   exportData(options: ExportOptions): string;
+  /** The whole ledger as a versioned JSON backup file the user keeps. */
+  backup(): string;
+  /** Replace the ledger from a backup file. Returns null on success, else the
+   *  reason it was refused — the current ledger is left untouched either way. */
+  restore(raw: string): string | null;
   /** Merge one person's claims, settlements and transactions into another. */
   mergePeople(keepId: string, mergeId: string): string | null;
   /** Move selected claims off a person into a new one named by an alias. */
@@ -214,6 +219,24 @@ export function useLedger(): UseLedger {
   const exportData = useCallback((options: ExportOptions): string => {
     return exportCsvTransition(ledger, options);
   }, [ledger]);
+
+  const backup = useCallback((): string => serializeBackup(ledger, today), [ledger, today]);
+
+  const restore = useCallback((raw: string): string | null => {
+    const result = restoreBackup(raw);
+    if (!result.ok) {
+      setStatus(result.error);
+      return result.error;
+    }
+    setLedger(result.ledger);
+    const n = result.ledger.transactions.length;
+    setStatus(
+      result.migrated.length > 0
+        ? `Restored ${n} transactions and upgraded the backup from an older version.`
+        : `Restored ${n} transactions from backup.`
+    );
+    return null;
+  }, []);
 
   const mergePeople = useCallback((keepId: string, mergeId: string): string | null => {
     const keep = ledger.people.find((p) => p.id === keepId);
@@ -387,6 +410,8 @@ export function useLedger(): UseLedger {
     reconcile,
     editAccount,
     exportData,
+    backup,
+    restore,
     mergePeople,
     unmergePerson,
     identifyMerchants,

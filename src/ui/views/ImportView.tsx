@@ -220,9 +220,108 @@ export function ImportView({ L }: { L: UseLedger }) {  const [text, setText] = u
 
         <MerchantLookup L={L} />
 
+        <BackupSection L={L} />
+
         {L.ledger.transactions.length > 0 && <ExportSection L={L} />}
       </div>
     </div>
+  );
+}
+
+/**
+ * Backup and restore. A CSV export is for a spreadsheet; a backup is for this
+ * app — the whole versioned ledger, splits, people, merchant cache and all, so
+ * a restore brings the state back exactly, not an approximation re-imported row
+ * by row. This is the one thing that turns a browser's localStorage (which a
+ * cleared cache can wipe without warning) into something safe to rely on.
+ */
+function BackupSection({ L }: { L: UseLedger }) {
+  const restoreRef = useRef<HTMLInputElement>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const hasData = L.ledger.transactions.length > 0 || L.ledger.people.length > 0;
+
+  function downloadBackup() {
+    const blob = new Blob([L.backup()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `split-ledger-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function pickRestore() {
+    restoreRef.current?.click();
+  }
+
+  function onRestoreFile(file: File) {
+    const reader = new FileReader();
+    // Read first, decide second: a restore replaces everything, so if there is
+    // live data we make the user confirm before it is overwritten.
+    reader.onload = () => {
+      const raw = String(reader.result);
+      if (hasData) setConfirming(raw);
+      else L.restore(raw);
+    };
+    reader.readAsText(file);
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">Backup &amp; restore</h2>
+        <p className="panel-sub">The whole ledger as one file — your safety net against a cleared browser</p>
+      </div>
+
+      {confirming ? (
+        <div className="row" role="alertdialog" aria-label="Confirm restore">
+          <div className="row-body">
+            <div className="row-title">Replace everything with this backup?</div>
+            <div className="row-sub">
+              Your current {L.ledger.transactions.length} transactions will be overwritten. This
+              cannot be undone — download a backup of what you have first if you are unsure.
+            </div>
+          </div>
+          <div className="btn-stack" style={{ flexDirection: "row", gap: "0.5rem" }}>
+            <button className="btn secondary" onClick={() => setConfirming(null)}>
+              Cancel
+            </button>
+            <button
+              className="btn danger"
+              onClick={() => {
+                L.restore(confirming);
+                setConfirming(null);
+              }}
+            >
+              Replace
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="btn-stack">
+          <button className="btn" onClick={downloadBackup} disabled={!hasData}>
+            Download backup
+          </button>
+          <button className="btn secondary" onClick={pickRestore}>
+            Restore from file
+          </button>
+        </div>
+      )}
+
+      <input
+        ref={restoreRef}
+        type="file"
+        accept="application/json,.json"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onRestoreFile(file);
+          e.target.value = "";
+        }}
+      />
+    </section>
   );
 }
 
