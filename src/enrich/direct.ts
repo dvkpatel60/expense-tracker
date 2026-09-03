@@ -1,6 +1,11 @@
 import { parseFacts } from "./facts.js";
-import { buildInsightsPrompt, parseInsights } from "./insights.js";
-import type { Insight } from "./insights.js";
+import {
+  buildInsightsPrompt,
+  parseInsights,
+  temperatureFor,
+  validateAnalysisOptions,
+} from "./insights.js";
+import type { AnalysisOptions, Insight } from "./insights.js";
 import type { InsightsDigest } from "../core/digest.js";
 import { providerFor, resolveModel } from "./providers.js";
 import type { ProviderId } from "./providers.js";
@@ -51,6 +56,7 @@ export async function requestInsightsDirect(config: {
   digest: InsightsDigest;
   provider: ProviderId;
   model?: string;
+  options?: AnalysisOptions;
   apiKey?: string;
   fetchImpl?: typeof fetch;
 }): Promise<Insight[]> {
@@ -59,7 +65,18 @@ export async function requestInsightsDirect(config: {
   const model = resolveModel(spec, config.model);
   if (!model) throw new Error(`${spec.label} cannot use the model ${String(config.model)}.`);
 
-  const req = spec.buildPromptRequest(model, buildInsightsPrompt(config.digest), config.apiKey ?? "");
+  // The single-file build has no server to re-validate against, so the same
+  // registry check the function performs happens here before anything is sent.
+  const badOptions = validateAnalysisOptions(config.options);
+  if (badOptions) throw new Error(badOptions);
+  const options = config.options ?? {};
+
+  const req = spec.buildPromptRequest(
+    model,
+    buildInsightsPrompt(config.digest, options),
+    config.apiKey ?? "",
+    { temperature: temperatureFor(options.tone) }
+  );
   const doFetch = config.fetchImpl ?? fetch;
   const res = await doFetch(req.url, { method: "POST", headers: req.headers, body: req.body });
   if (!res.ok) throw new Error(`Analysis failed with status ${res.status}`);

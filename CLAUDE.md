@@ -29,7 +29,7 @@ them. Read it before changing `normalize.ts`, `split.ts`, or `pairing.ts`.
 ```
 npm run dev              # ./scripts/dev.sh — loads .env, serves app + /api on one port
 npm run dev:vite         # plain Vite, no /api routes
-npm test                 # vitest run — 18 files, 246 tests
+npm test                 # vitest run — 18 files, 259 tests
 npm run test:watch
 npm run typecheck        # tsc --noEmit
 npm run verify           # typecheck + test + build. Run this before claiming done.
@@ -160,7 +160,25 @@ convenience. Add the field to `InsightsDigest`, validate it in `validateDigest`
 (`enrich/insights.ts`) so the server enforces the new shape too, mention it in
 `buildInsightsPrompt`, and extend the exclusion assertions in `tests/digest.test.ts`.
 Insight *kinds* are a closed set in `insights.ts` and each renders differently in
-`ui/components/InsightsPanel.tsx`.
+`ui/components/InsightsPanel.tsx` (which is now only the card renderer,
+`InsightsList`).
+
+**Adding a copilot workflow.** One entry in `WORKFLOWS` (`enrich/insights.ts`) and
+nothing else. A workflow is an *instruction* appended to the prompt, never data, which
+is why the copilot does not widen the privacy boundary — there is no workflow that can
+carry a transaction, a date or a name, because a workflow is a sentence. It arrives in a
+request body, so like the model id it is resolved through `workflowFor` rather than
+interpolated; `validateAnalysisOptions` refuses an unknown workflow, tone or focus
+category, and a `needsFocus` workflow with nothing in focus. Tone is the one control
+that reaches a provider parameter (temperature, via `temperatureFor`) — everything else
+is prompt text. `ui/useCopilot.ts` holds which question is being asked; `CopilotPanel`
+renders it and `ModelPicker` picks the model, shared with `ImportView` so provider
+choice lives in one place.
+
+Free-form chat is deliberately not built. The boundary is a *shape*, and a text box is
+an invitation to type a name, an account or a date into it. For the same reason there is
+no "summarize this transaction" workflow: it would need an individual transaction to
+cross the wire, which `InsightsDigest` has nowhere to put.
 
 ## Adding a provider
 
@@ -200,7 +218,10 @@ Enforcement is in three places for each, and all must stay in sync:
 2. `netlify/functions/enrich.mts` re-validates the merchant list server-side, and
    `netlify/functions/insights.mts` re-validates the digest via `validateDigest`
    (`enrich/insights.ts`) — types, bounds, known categories, no `etransfer:` prefix, no
-   day-level date in `period`. The boundary is enforced, not just promised.
+   day-level date in `period`. It also re-validates everything riding alongside the
+   digest via `validateAnalysisOptions`: workflow, tone and focus category are registry
+   lookups, never free text reaching a prompt. The boundary is enforced, not just
+   promised.
 3. `netlify.toml` sets CSP `connect-src 'self'`, so nothing on the page can reach a
    third-party origin.
 

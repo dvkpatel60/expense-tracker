@@ -16,6 +16,25 @@ function deploymentOffering(...configured: string[]): void {
   });
 }
 
+/**
+ * A deployment with a Gemini key that answers analysis with `insights`.
+ * Records each request body so a test can assert what actually left the page.
+ */
+function deploymentAnswering(sent: unknown[], insights: unknown[]): void {
+  const providers = describeProviders((spec) => spec.id === "gemini");
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes("/api/providers")) {
+      return new Response(JSON.stringify({ providers }), { status: 200 });
+    }
+    if (url.includes("/api/insights")) {
+      sent.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ insights }), { status: 200 });
+    }
+    throw new Error(`Unstubbed fetch: ${url}`);
+  });
+}
+
 /** The figure shown on one KPI card, by its label. */
 function kpi(label: string): string {
   const card = screen.getByText(label).closest(".kpi");
@@ -118,10 +137,14 @@ describe("App", () => {
     const user = await boot();
     await user.click(screen.getByRole("button", { name: /^Import/ }));
 
-    const provider = (await screen.findByLabelText("Provider")) as HTMLSelectElement;
-    const offered = Array.from(provider.options).map((o) => o.textContent);
-    expect(offered).toContain("Google Gemini");
-    expect(offered).not.toContain("Anthropic");
+    // Every provider is listed with its key status — an operator has to be
+    // told which env var is missing — but only a configured one is selectable.
+    const provider = await screen.findByLabelText("Provider");
+    const rows = within(provider).getAllByRole("radio");
+    const offered = rows.map((r) => r.textContent ?? "");
+    expect(offered.join(" ")).toContain("Google Gemini");
+    expect(offered.join(" ")).toContain("ANTHROPIC_API_KEY not set");
+    expect(rows.filter((r) => !(r as HTMLButtonElement).disabled)).toHaveLength(1);
 
     // And the model list follows the chosen provider.
     const model = screen.getByLabelText("Model") as HTMLSelectElement;
@@ -176,6 +199,60 @@ describe("App", () => {
     expect(within(priyaCard as HTMLElement).getByText(/settled up/i)).toBeTruthy();
     // And the open-claim badge on the tab is gone.
     expect(screen.getByRole("button", { name: /^People/ }).querySelector(".badge")).toBeNull();
+  });
+
+  it("keeps the copilot honest when no provider is configured", async () => {
+    deploymentOffering();
+    await boot();
+    // It names the exact env vars rather than saying "unavailable", and it
+    // does not offer a question it cannot answer.
+    expect(await screen.findByText(/ANTHROPIC_API_KEY or GEMINI_API_KEY/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /find savings/i })).toBeNull();
+  });
+
+  it("runs a copilot workflow and renders the answer it gets back", async () => {
+    const sent: unknown[] = [];
+    deploymentAnswering(sent, [
+      { kind: "headline", text: "Dining led the month." },
+      { kind: "summary", text: "You covered the table more often than not." },
+      { kind: "savings", text: "Split Dining more often.", categoryId: "Dining" },
+    ]);
+    const user = await boot();
+
+    await user.click(await screen.findByRole("button", { name: /find savings/i }));
+
+    expect(await screen.findByText(/Dining led the month/)).toBeTruthy();
+    expect(screen.getByText(/covered the table more often/)).toBeTruthy();
+
+    // The workflow reached the wire as an id, and the body is still nothing but
+    // the aggregates digest: no day-level date, no counterparty, no account.
+    const body = sent.at(-1) as { options: { workflow: string; tone: string } };
+    expect(body.options.workflow).toBe("savings");
+    expect(body.options.tone).toBe("balanced");
+    const wire = JSON.stringify(sent.at(-1));
+    expect(wire).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(wire).not.toContain("etransfer:");
+  });
+
+  it("only asks about a category once one is pinned", async () => {
+    const sent: unknown[] = [];
+    deploymentAnswering(sent, [{ kind: "headline", text: "Dining is steady." }]);
+    const user = await boot();
+
+    // Nothing pinned: the category workflow says what it needs and stays shut.
+    const before = await screen.findByRole("button", { name: /summarize category/i });
+    expect((before as HTMLButtonElement).disabled).toBe(true);
+    expect(before.textContent).toMatch(/pin a category first/i);
+
+    await user.click(document.querySelector(".cat-row") as HTMLButtonElement);
+    const lens = document.querySelector(".lens.pinned") as HTMLElement;
+    const pinned = lens.querySelector(".lens-title")?.textContent ?? "";
+
+    await user.click(within(lens).getByRole("button", { name: /analyze this category/i }));
+
+    const body = sent.at(-1) as { options: { workflow: string; focus: string } };
+    expect(body.options.workflow).toBe("category");
+    expect(body.options.focus).toBe(pinned);
   });
 
   /** The ring's key labels, which are the groups until a drill replaces them

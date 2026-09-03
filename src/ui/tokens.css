@@ -624,6 +624,23 @@ input, select, textarea { font: inherit; color: inherit; }
 .lens-amount { font-weight: 600; }
 .lens-share { grid-column: 3; color: var(--green); font-size: var(--step--2); }
 
+.lens-actions {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+.lens-analyze {
+  display: block; width: 100%;
+  text-align: right;
+  color: var(--accent-ink); font-weight: 600;
+  font-size: var(--step--2);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.lens-analyze:hover { color: var(--accent-hover); }
+.lens-actions .lens-all { margin: 0; padding-top: 0; border-top: 0; }
+
 .lens-hint, .lens-all {
   margin: 0.45rem 0 0;
   padding-top: 0.4rem;
@@ -674,6 +691,109 @@ input, select, textarea { font: inherit; color: inherit; }
   white-space: nowrap;
 }
 .pill.act { color: var(--accent-ink); border-color: var(--accent-line); background: var(--accent-soft); }
+
+/* ---------- AI copilot rail ---------- */
+
+.copilot-settings-toggle {
+  color: var(--ink-2);
+  font-size: var(--step--2);
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.copilot-settings-toggle:hover { color: var(--ink); border-color: var(--ink-3); }
+
+.copilot-setup {
+  padding: 0.8rem 0.9rem;
+  margin-bottom: 0.9rem;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+.copilot-setup .field-label { margin-top: 0.85rem; }
+.copilot-setup .model-picker + .field-label { margin-top: 0.85rem; }
+
+/* Predefined questions, not a text box: each button says what it will ask and
+   what it will give back, because a question you cannot preview is a gamble. */
+.workflows { display: grid; gap: 0.4rem; margin-bottom: 0.9rem; }
+.workflow {
+  display: grid;
+  gap: 0.1rem;
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--panel);
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.workflow:hover:not(:disabled) { border-color: var(--accent-line); background: var(--accent-soft); }
+.workflow.on { border-color: var(--accent-line); background: var(--accent-soft); }
+.workflow:disabled { opacity: 0.55; cursor: default; }
+.workflow-label { font-weight: 600; font-size: var(--step--1); }
+.workflow-hint { color: var(--ink-3); font-size: var(--step--2); }
+
+.tone-row { display: flex; gap: 0.3rem; }
+.tone {
+  flex: 1;
+  padding: 0.28rem 0.4rem;
+  font-size: var(--step--2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tone.on { color: var(--ink); font-weight: 600; border-color: var(--accent-line); background: var(--accent-soft); }
+
+/* Prose above the cards: the shape of the answer before its parts. */
+.insight-summary {
+  margin: 0 0 0.9rem;
+  color: var(--ink-2);
+  font-size: var(--step--1);
+  line-height: 1.6;
+}
+
+/* ---------- provider / model picker ---------- */
+
+.provider-rows { display: grid; gap: 0.3rem; margin-bottom: 0.9rem; }
+.provider-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: left;
+  font-size: var(--step--1);
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.provider-row.on { border-color: var(--accent-line); background: var(--accent-soft); }
+.provider-row:disabled { opacity: 0.6; cursor: default; }
+.provider-name { font-weight: 600; }
+/* The env var name is the actionable half of "unavailable", so it is the
+   status, not a footnote. */
+.provider-state { color: var(--ink-3); font-size: var(--step--2); }
+.provider-state.on { color: var(--green); }
+.provider-models { margin-left: auto; color: var(--ink-3); font-size: var(--step--2); }
+
+.model-picker .field {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--ink-2);
+  font-size: var(--step--1);
+  font-weight: 500;
+}
+.model-picker .field select {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 400;
+}
+.picker-note { margin: 0.6rem 0 0; color: var(--ink-3); font-size: var(--step--2); }
 
 /* ---------- AI insights rail ---------- */
 
@@ -743,6 +863,7 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 .insight-dot.anomaly { background: var(--amber); }
 .insight-dot.habit { background: var(--purple); }
 .insight-dot.savings { background: var(--green); }
+.insight-dot.summary { background: var(--ink-3); }
 .insight-dot.action { background: var(--green); }
 .insight-kind {
   font-size: var(--step--2);

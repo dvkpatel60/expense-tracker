@@ -4,6 +4,7 @@ import type { AccountKind } from "../../core/types.js";
 import { detectParser } from "../../parsers/index.js";
 import { SAMPLES } from "../samples.js";
 import type { UseLedger } from "../useLedger.js";
+import { ModelPicker } from "../components/ModelPicker.js";
 
 export function ImportView({ L }: { L: UseLedger }) {  const [text, setText] = useState("");
   const [label, setLabel] = useState("");
@@ -234,14 +235,14 @@ function ExportSection({ L }: { L: UseLedger }) {
 }
 
 /**
- * Provider and model picker. Built from what the deployment reports rather than
- * from a list compiled into the bundle, so configuring a key is the only step
- * needed to make a provider appear here. One choice serves both features that
- * talk to a model: merchant identification and the Overview analysis.
+ * Provider status and the merchant-identification action.
+ *
+ * The picker itself is ModelPicker, shared with the copilot on Overview: one
+ * choice serves both features that talk to a model, so there is one place a
+ * provider can be chosen and one place its key status is reported.
  */
 function MerchantLookup({ L }: { L: UseLedger }) {
   const usable = L.providers.filter((p) => p.configured);
-  const active = usable.find((p) => p.id === L.enrichment?.provider) ?? null;
 
   return (
     <section className="panel">
@@ -250,61 +251,32 @@ function MerchantLookup({ L }: { L: UseLedger }) {
         <p className="panel-sub">Used for merchant identification and Overview analysis</p>
       </div>
 
-      {usable.length === 0 ? (
+      {usable.length === 0 && (
         <div className="row">
           <div className="row-body">
             <div className="row-title">Not configured</div>
             <div className="row-sub">
               {L.providers.length === 0
                 ? "No lookup service is available in this build."
-                : `Set ${L.providers.map((p) => p.envVar).join(" or ")} to enable merchant identification and analysis.`}{" "}
+                : "Set one of the keys listed below on the deployment to enable merchant identification and analysis."}{" "}
               Every local rule still runs without it.
             </div>
           </div>
         </div>
-      ) : (
-        <>
-          <div className="field-label">Provider</div>
-          <select
-            className="select"
-            aria-label="Provider"
-            value={L.enrichment?.provider ?? ""}
-            onChange={(e) => L.chooseProvider(e.target.value)}
-          >
-            {usable.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+      )}
 
-          <div className="field-label" style={{ marginTop: "0.9rem" }}>
-            Model
-          </div>
-          <select
-            className="select"
-            aria-label="Model"
-            value={L.enrichment?.model ?? ""}
-            onChange={(e) => L.chooseModel(e.target.value)}
-          >
-            {(active?.models ?? []).map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-                {m.note ? ` — ${m.note}` : ""}
-              </option>
-            ))}
-          </select>
+      <ModelPicker L={L} />
 
-          <div className="btn-stack">
-            <button
-              className="btn secondary"
-              disabled={L.busy || L.ledger.transactions.length === 0}
-              onClick={() => void L.identifyMerchants()}
-            >
-              {L.busy ? "Identifying…" : "Identify merchants"}
-            </button>
-          </div>
-        </>
+      {usable.length > 0 && (
+        <div className="btn-stack">
+          <button
+            className="btn secondary"
+            disabled={L.busy || L.ledger.transactions.length === 0}
+            onClick={() => void L.identifyMerchants()}
+          >
+            {L.busy ? "Identifying…" : "Identify merchants"}
+          </button>
+        </div>
       )}
     </section>
   );

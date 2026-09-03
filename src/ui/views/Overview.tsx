@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { buildSpendTree, needsAttention, periodTotals, spendIn, avgTransactionTotal, spendingVelocity, settlementRate, topCategoryDelta } from "../../core/ledger.js";
 import type { SpendCategory, SpendGroup } from "../../core/ledger.js";
@@ -10,10 +10,11 @@ import type { CategoryId } from "../../core/types.js";
 import { CategoryDonut } from "../components/CategoryDonut.js";
 import { CategoryLens, lensTargetForCategory } from "../components/CategoryLens.js";
 import type { LensTarget } from "../components/CategoryLens.js";
-import { InsightsPanel } from "../components/InsightsPanel.js";
+import { CopilotPanel } from "../components/CopilotPanel.js";
 import { ProportionBar, SpendChart } from "../components/SpendChart.js";
 import { Money } from "../components/Money.js";
 import { categoryColor, dollarsAbs, dayLabel, monthLabel } from "../format.js";
+import { useCopilot } from "../useCopilot.js";
 import type { UseLedger } from "../useLedger.js";
 import type { ActivityIntent } from "./Activity.js";
 
@@ -73,11 +74,14 @@ export function Overview({
     : categories;
   const maxCash = listed.reduce((m, c) => (c.cashOut > m ? c.cashOut : m), cents(1));
 
-  // Surface a cached analysis for this period without asking a model anything.
-  useEffect(() => {
-    void L.peekInsights(period);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [L.peekInsights, period]);
+  // A pinned category is the copilot's focus; a hovered one is not, because a
+  // question should not change under the pointer. useCopilot owns the cached
+  // answer for whatever question is currently selected.
+  const focus =
+    lens?.pinned && lens.target.kind === "category" ? (lens.target.id as CategoryId) : null;
+  // Lifted here rather than owned by the panel, because the pinned lens also
+  // drives it: two components sharing state is exactly when it moves up.
+  const copilot = useCopilot(L, period, focus);
 
   return (
     <div className="overview">
@@ -214,7 +218,7 @@ export function Overview({
       </div>
 
       <div className="ov-rail">
-        <InsightsPanel L={L} period={period} onGoto={onGoto} />
+        <CopilotPanel L={L} copilot={copilot} focus={focus} onGoto={onGoto} />
 
         {recurring.length > 0 && (
           <section className="panel recurring">
@@ -294,6 +298,9 @@ export function Overview({
             setLens(null);
             onOpen(id);
           }}
+          {...(lens.pinned && lens.target.kind === "category"
+            ? { onAnalyze: () => void copilot.run("category") }
+            : {})}
           onOpenActivity={() => {
             setLens(null);
             onGoto("activity", {

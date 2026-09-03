@@ -1,95 +1,61 @@
 import type { Insight } from "../../enrich/insights.js";
 import { categoryColor } from "../format.js";
-import type { UseLedger } from "../useLedger.js";
 import type { ActivityIntent } from "../views/Activity.js";
 
 type View = "summary" | "activity" | "people" | "import";
 
 /**
- * Structured analysis, not a chat box. The model answers in typed insights the
+ * The insight-kind renderer.
+ *
+ * Structured analysis, not a chat log: the model answers in typed insights the
  * UI renders natively, and any insight about one category is a link into
  * Activity filtered to it — analysis that cannot be acted on is trivia.
  *
- * Nothing here fires without a click, answers are remembered per digest, and
- * only the aggregates digest ever leaves the device (see core/digest.ts).
+ * This is only the rendering half. What gets asked, of which model, and in what
+ * voice belongs to CopilotPanel; keeping them apart means a new workflow does
+ * not touch the card layout and a new insight kind does not touch the controls.
  */
-export function InsightsPanel({
-  L,
-  period,
+export function InsightsList({
+  insights,
   onGoto,
 }: {
-  L: UseLedger;
-  period: string | null;
+  insights: readonly Insight[];
   onGoto(view: View, intent?: ActivityIntent): void;
 }) {
-  const direct = import.meta.env.VITE_ENRICH_MODE === "direct";
-  const configured = direct || L.enrichment !== null;
-  const headline = L.insights?.find((i) => i.kind === "headline") ?? null;
-  const actions = (L.insights ?? []).filter((i) => i.kind === "action");
-  const observed = (L.insights ?? []).filter(
-    (i) => i.kind !== "headline" && i.kind !== "action"
+  const headline = insights.find((i) => i.kind === "headline") ?? null;
+  const summary = insights.find((i) => i.kind === "summary") ?? null;
+  const actions = insights.filter((i) => i.kind === "action");
+  const observed = insights.filter(
+    (i) => i.kind !== "headline" && i.kind !== "summary" && i.kind !== "action"
   );
 
+  if (insights.length === 0) {
+    return <div className="insights-empty">The model had nothing notable to report.</div>;
+  }
+
   return (
-    <section className="panel insights-panel">
-      <div className="insights-head">
-        <h2 className="panel-title">
-          <span className="spark" aria-hidden="true">✦</span>
-          Analysis
-          {L.insights && L.insights.length > 0 && (
-            <span className="insights-count">{L.insights.length}</span>
-          )}
-        </h2>
-        <button
-          className="btn-primary"
-          disabled={!configured || L.insightsBusy || L.ledger.transactions.length === 0}
-          onClick={() => void L.generateInsights(period)}
-        >
-          {L.insightsBusy ? "Analyzing…" : L.insights ? "Refresh" : "Analyze"}
-        </button>
-      </div>
-
-      {!configured ? (
-        <div className="insights-empty">
-          Analysis needs an AI provider. Set{" "}
-          {L.providers.map((p) => p.envVar).join(" or ") || "an API key"} on the deployment and
-          it appears here — the rest of the app doesn&rsquo;t need it.
+    <>
+      {headline && <div className="headline">{headline.text}</div>}
+      {/* Prose, not a card: the summary answers the question that was asked,
+          and the cards below break it into things to act on. */}
+      {summary && <p className="insight-summary">{summary.text}</p>}
+      {actions.length > 0 && (
+        <div className="insight-group">
+          <span className="eyebrow">Needs action</span>
+          {actions.map((insight, i) => (
+            <InsightRow key={i} insight={insight} onGoto={onGoto} />
+          ))}
         </div>
-      ) : L.insights === null ? (
-        <div className="insights-empty">
-          One click gets a structured read on this period: what moved, what looks unusual, and
-          what it costs you specifically — not what left your accounts.
-        </div>
-      ) : (
-        <>
-          {headline && <div className="headline">{headline.text}</div>}
-          {actions.length > 0 && (
-            <div className="insight-group">
-              <span className="eyebrow">Needs action</span>
-              {actions.map((insight, i) => (
-                <InsightRow key={i} insight={insight} onGoto={onGoto} />
-              ))}
-            </div>
-          )}
-          {observed.length > 0 && (
-            <div className="insight-group">
-              <span className="eyebrow">Observed</span>
-              {observed.map((insight, i) => (
-                <InsightRow key={i} insight={insight} onGoto={onGoto} />
-              ))}
-            </div>
-          )}
-          {L.insights.length === 0 && (
-            <div className="insights-empty">The model had nothing notable to report.</div>
-          )}
-        </>
       )}
-
-      <p className="privacy-note">
-        Only category and merchant totals leave this device — never individual transactions,
-        dates, balances, accounts or names.
-      </p>
-    </section>
+      {observed.length > 0 && (
+        <div className="insight-group">
+          <span className="eyebrow">Observed</span>
+          {observed.map((insight, i) => (
+            <InsightRow key={i} insight={insight} onGoto={onGoto} />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

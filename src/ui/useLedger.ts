@@ -21,7 +21,7 @@ import { enrichMerchants } from "../enrich/enricher.js";
 import { directTransport, requestInsightsDirect } from "../enrich/direct.js";
 import { fetchProviders, proxyTransport, requestInsights } from "../enrich/proxy.js";
 import { coerceInsights } from "../enrich/insights.js";
-import type { Insight } from "../enrich/insights.js";
+import type { AnalysisOptions, Insight } from "../enrich/insights.js";
 import { buildInsightsDigest } from "../core/digest.js";
 import { PROVIDERS, describeProviders } from "../enrich/providers.js";
 import type { ProviderAvailability } from "../enrich/providers.js";
@@ -71,9 +71,9 @@ export interface UseLedger {
   /** Structured AI analysis of the current period; null until generated. */
   insights: readonly Insight[] | null;
   insightsBusy: boolean;
-  generateInsights(period: string | null): Promise<void>;
+  generateInsights(period: string | null, options?: AnalysisOptions): Promise<void>;
   /** Show a cached analysis for this period if one exists; never calls a model. */
-  peekInsights(period: string | null): Promise<void>;
+  peekInsights(period: string | null, options?: AnalysisOptions): Promise<void>;
   reset(): void;
   dismissStatus(): void;
 }
@@ -302,13 +302,24 @@ export function useLedger(): UseLedger {
   // Answers are remembered per digest, so revisiting a period is free and no
   // model is ever called without a click. Editing the ledger changes the
   // digest, which is exactly when a fresh analysis is worth paying for.
-  const insightsKey = (period: string | null, digest: unknown): string =>
-    `split-ledger:insights:${period ?? "all"}:${fnv1a(JSON.stringify(digest))}`;
+  const insightsKey = (
+    period: string | null,
+    digest: unknown,
+    options: AnalysisOptions
+  ): string =>
+    // The options are part of the key: one digest asked two different questions
+    // is two different answers, and serving one for the other would be a lie
+    // about what the model was asked.
+    `split-ledger:insights:${period ?? "all"}:${fnv1a(
+      JSON.stringify(digest)
+    )}:${fnv1a(JSON.stringify(options))}`;
 
   const peekInsights = useCallback(
-    async (period: string | null) => {
+    async (period: string | null, options: AnalysisOptions = {}) => {
       const digest = buildInsightsDigest(ledger, period);
-      const cached = await store.current.get(insightsKey(period, digest)).catch(() => null);
+      const cached = await store.current
+        .get(insightsKey(period, digest, options))
+        .catch(() => null);
       if (!cached) {
         setInsights(null);
         return;
@@ -323,9 +334,9 @@ export function useLedger(): UseLedger {
   );
 
   const generateInsights = useCallback(
-    async (period: string | null) => {
+    async (period: string | null, options: AnalysisOptions = {}) => {
       const digest = buildInsightsDigest(ledger, period);
-      const key = insightsKey(period, digest);
+      const key = insightsKey(period, digest, options);
       const direct = import.meta.env.VITE_ENRICH_MODE === "direct";
       if (!direct && !enrichment) {
         setStatus("No AI provider is configured on this deployment, so analysis is unavailable.");
@@ -338,6 +349,7 @@ export function useLedger(): UseLedger {
           digest,
           provider,
           ...(enrichment ? { model: enrichment.model } : {}),
+          options,
         };
         const result = direct ? await requestInsightsDirect(args) : await requestInsights(args);
         setInsights(result);

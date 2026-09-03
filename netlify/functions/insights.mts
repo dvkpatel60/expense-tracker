@@ -1,4 +1,11 @@
-import { buildInsightsPrompt, parseInsights, validateDigest } from "../../src/enrich/insights.js";
+import {
+  buildInsightsPrompt,
+  parseInsights,
+  temperatureFor,
+  validateAnalysisOptions,
+  validateDigest,
+} from "../../src/enrich/insights.js";
+import type { AnalysisOptions } from "../../src/enrich/insights.js";
 import type { InsightsDigest } from "../../src/core/digest.js";
 import { PROVIDERS, providerFor, resolveModel } from "../../src/enrich/providers.js";
 import type { ProviderSpec } from "../../src/enrich/providers.js";
@@ -15,13 +22,23 @@ import type { ProviderSpec } from "../../src/enrich/providers.js";
  *
  * Same posture as /api/enrich: keys stay here, the model is validated against
  * the registry, and the provider's envelope is normalized before replying.
+ *
+ * The copilot's workflow, tone and category focus ride alongside the digest.
+ * None of them is data — they only steer what the model is asked to notice —
+ * but they arrive in a request body all the same, so each is resolved against
+ * its registry here rather than interpolated into a prompt.
  */
 export default async (req: Request): Promise<Response> => {
   if (req.method !== "POST") {
     return json({ error: "Use POST." }, 405);
   }
 
-  let payload: { digest?: unknown; provider?: unknown; model?: unknown };
+  let payload: {
+    digest?: unknown;
+    provider?: unknown;
+    model?: unknown;
+    options?: unknown;
+  };
   try {
     payload = (await req.json()) as typeof payload;
   } catch {
@@ -30,6 +47,10 @@ export default async (req: Request): Promise<Response> => {
 
   const problem = validateDigest(payload.digest);
   if (problem) return json({ error: problem }, 400);
+
+  const badOptions = validateAnalysisOptions(payload.options);
+  if (badOptions) return json({ error: badOptions }, 400);
+  const options = (payload.options ?? {}) as AnalysisOptions;
 
   const spec =
     payload.provider === undefined || payload.provider === null || payload.provider === ""
@@ -62,8 +83,10 @@ export default async (req: Request): Promise<Response> => {
     return json({ error: `${spec.label} cannot use the model ${String(payload.model)}.` }, 400);
   }
 
-  const prompt = buildInsightsPrompt(payload.digest as InsightsDigest);
-  const upstream = spec.buildPromptRequest(model, prompt, key);
+  const prompt = buildInsightsPrompt(payload.digest as InsightsDigest, options);
+  const upstream = spec.buildPromptRequest(model, prompt, key, {
+    temperature: temperatureFor(options.tone),
+  });
   let res: Response;
   try {
     res = await fetch(upstream.url, {

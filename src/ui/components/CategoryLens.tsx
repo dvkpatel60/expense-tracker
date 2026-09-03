@@ -96,6 +96,7 @@ export function CategoryLens({
   onClose,
   onOpenTransaction,
   onOpenActivity,
+  onAnalyze,
 }: {
   target: LensTarget;
   transactions: readonly Transaction[];
@@ -106,6 +107,9 @@ export function CategoryLens({
   onClose(): void;
   onOpenTransaction(id: string): void;
   onOpenActivity(): void;
+  /** Present only for a pinned category: asks the copilot about this one
+   *  category. Sends its id, never its transactions. */
+  onAnalyze?(): void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState(0);
@@ -311,9 +315,16 @@ export function CategoryLens({
       </ul>
 
       {pinned ? (
-        <button className="lens-all" onClick={() => handOff(onOpenActivity)}>
-          See all {rows.length} in Activity &rarr;
-        </button>
+        <div className="lens-actions">
+          {onAnalyze && (
+            <button className="lens-analyze" onClick={onAnalyze}>
+              <span className="spark" aria-hidden="true">✦</span> Analyze this category
+            </button>
+          )}
+          <button className="lens-all" onClick={() => handOff(onOpenActivity)}>
+            See all {rows.length} in Activity &rarr;
+          </button>
+        </div>
       ) : (
         <p className="lens-hint">
           {hidden > 0 ? `${hidden} more — click to pin` : "Click to pin"}

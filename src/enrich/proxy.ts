@@ -1,6 +1,6 @@
 import { coerceFacts } from "./facts.js";
 import { coerceInsights } from "./insights.js";
-import type { Insight } from "./insights.js";
+import type { AnalysisOptions, Insight } from "./insights.js";
 import type { InsightsDigest } from "../core/digest.js";
 import type { ProviderAvailability, ProviderId } from "./providers.js";
 import type { EnrichmentTransport } from "./types.js";
@@ -86,6 +86,7 @@ export async function requestInsights(config: {
   digest: InsightsDigest;
   provider: ProviderId;
   model?: string;
+  options?: AnalysisOptions;
   fetchImpl?: typeof fetch;
 }): Promise<Insight[]> {
   const endpoint = config.endpoint ?? "/api/insights";
@@ -97,6 +98,7 @@ export async function requestInsights(config: {
       digest: config.digest,
       provider: config.provider,
       ...(config.model ? { model: config.model } : {}),
+      ...(config.options ? { options: config.options } : {}),
     }),
   });
   if (!res.ok) throw new Error(await explain(res));

@@ -21,6 +21,15 @@ export interface ModelOption {
   readonly note?: string;
 }
 
+/** Per-request knobs the copilot's tone selector needs. Deliberately tiny:
+ *  MAX_OUTPUT_TOKENS stays shared and is not one of these, because a ceiling
+ *  below the batch cap truncates the JSON mid-array rather than shortening it. */
+export interface PromptOptions {
+  /** 0-1, already resolved from a tone by enrich/insights.ts. Omitted means
+   *  the provider's existing default, so enrichment is untouched. */
+  readonly temperature?: number;
+}
+
 export interface UpstreamRequest {
   readonly url: string;
   readonly headers: Readonly<Record<string, string>>;
@@ -39,7 +48,12 @@ export interface ProviderSpec {
   buildRequest(model: string, keys: readonly string[], apiKey: string): UpstreamRequest;
   /** Same wire shape, caller-supplied prompt. Insights analysis rides through
    *  here so a second feature cannot arrive with a second request builder. */
-  buildPromptRequest(model: string, prompt: string, apiKey: string): UpstreamRequest;
+  buildPromptRequest(
+    model: string,
+    prompt: string,
+    apiKey: string,
+    options?: PromptOptions
+  ): UpstreamRequest;
   extractText(data: unknown): string;
 }
 
@@ -70,7 +84,7 @@ const anthropic: ProviderSpec = {
     return this.buildPromptRequest(model, buildEnrichmentPrompt(keys), apiKey);
   },
 
-  buildPromptRequest(model, prompt, apiKey) {
+  buildPromptRequest(model, prompt, apiKey, options) {
     return {
       url: "https://api.anthropic.com/v1/messages",
       headers: {
@@ -81,6 +95,9 @@ const anthropic: ProviderSpec = {
       body: JSON.stringify({
         model,
         max_tokens: MAX_OUTPUT_TOKENS,
+        // Absent unless a tone asked for one, so merchant identification keeps
+        // the provider default it has always had.
+        ...(options?.temperature === undefined ? {} : { temperature: options.temperature }),
         messages: [{ role: "user", content: prompt }],
       }),
     };
@@ -119,7 +136,7 @@ const gemini: ProviderSpec = {
     return this.buildPromptRequest(model, buildEnrichmentPrompt(keys), apiKey);
   },
 
-  buildPromptRequest(model, prompt, apiKey) {
+  buildPromptRequest(model, prompt, apiKey, options) {
     return {
       // The model id is a path segment, so it is encoded rather than trusted —
       // it reaches here from a request body.
@@ -132,7 +149,7 @@ const gemini: ProviderSpec = {
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           maxOutputTokens: MAX_OUTPUT_TOKENS,
-          temperature: 0,
+          temperature: options?.temperature ?? 0,
           // Gemini can be held to JSON natively, which removes the code-fence
           // guessing. parseFacts still strips fences: belt and braces.
           responseMimeType: "application/json",
