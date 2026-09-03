@@ -5,15 +5,17 @@ import { SAMPLES } from "./samples.js";
 import { useLedger } from "./useLedger.js";
 import { Activity } from "./views/Activity.js";
 import type { ActivityIntent } from "./views/Activity.js";
+import { Accounts } from "./views/Accounts.js";
 import { ImportView } from "./views/ImportView.js";
 import { Overview } from "./views/Overview.js";
 import { People } from "./views/People.js";
 
-type View = "summary" | "activity" | "people" | "import";
+type View = "summary" | "activity" | "accounts" | "people" | "import";
 
 const TITLES: Record<View, string> = {
   summary: "Overview",
   activity: "Activity",
+  accounts: "Accounts",
   people: "People",
   import: "Import",
 };
@@ -41,9 +43,11 @@ export function App() {
   const subtitle =
     view === "people"
       ? `${L.ledger.people.length} ${L.ledger.people.length === 1 ? "person" : "people"} · ${openClaims} open ${openClaims === 1 ? "claim" : "claims"}`
-      : view === "import"
-        ? `${accounts} ${accounts === 1 ? "account" : "accounts"} · ${L.ledger.transactions.length} transactions held`
-        : `${inPeriod} transactions · ${accounts} ${accounts === 1 ? "account" : "accounts"} · ${period ? monthLabel(period) : "all time"}`;
+      : view === "accounts"
+        ? `${accounts} ${accounts === 1 ? "account" : "accounts"} · ${period ? monthLabel(period) : "all imported months"}`
+        : view === "import"
+          ? `${accounts} ${accounts === 1 ? "account" : "accounts"} · ${L.ledger.transactions.length} transactions held`
+          : `${inPeriod} transactions · ${accounts} ${accounts === 1 ? "account" : "accounts"} · ${period ? monthLabel(period) : "all time"}`;
 
   const goto = (v: View, i?: ActivityIntent): void => {
     setIntent(i ?? null);
@@ -62,6 +66,7 @@ export function App() {
             [
               ["summary", <IconOverview key="i" />, 0],
               ["activity", <IconActivity key="i" />, 0],
+              ["accounts", <IconAccounts key="i" />, 0],
               ["people", <IconPeople key="i" />, openClaims],
               ["import", <IconImport key="i" />, 0],
             ] as const
@@ -100,7 +105,7 @@ export function App() {
               </div>
             </header>
 
-            {(view === "summary" || view === "activity") && (
+            {(view === "summary" || view === "activity" || view === "accounts") && (
               <div className="filterbar">
                 <span className="filter-label">Time period</span>
                 <span className="period">
@@ -134,6 +139,7 @@ export function App() {
               {view === "activity" && (
                 <Activity L={L} period={period} intent={intent} onOpen={setOpenId} />
               )}
+              {view === "accounts" && <Accounts L={L} period={period} />}
               {view === "people" && <People L={L} onOpen={setOpenId} />}
               {view === "import" && <ImportView L={L} />}
             </div>
@@ -214,6 +220,16 @@ function IconActivity() {
   return (
     <svg {...icon}>
       <path d="M2 4h12M2 8h12M2 12h8" />
+    </svg>
+  );
+}
+
+function IconAccounts() {
+  return (
+    <svg {...icon}>
+      <rect x="2" y="5" width="12" height="8" rx="1.5" />
+      <path d="M2 8h12" />
+      <circle cx="11.5" cy="10.5" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }

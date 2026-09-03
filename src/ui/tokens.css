@@ -788,6 +788,57 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 
 .table-empty { padding: 2.5rem 1.1rem; color: var(--ink-3); text-align: center; }
 
+/* ---------- accounts + balance sheet ---------- */
+
+.sheet-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1.1rem;
+}
+.sheet-figure {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.sheet-figure.owing { color: var(--amber-ink); }
+.sheet-figure.strong { font-size: 1.75rem; }
+.sheet-delta {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+.sheet-delta.up { color: var(--green); }
+.sheet-delta.down { color: var(--red); }
+
+.util-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  color: var(--ink-2);
+  font-size: var(--step--1);
+  margin-bottom: 0.4rem;
+}
+
+.statement {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem 1.1rem;
+  margin: 0.9rem 0 0;
+  padding: 0.8rem 0.9rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.statement div { display: flex; justify-content: space-between; align-items: baseline; }
+.statement dt { color: var(--ink-2); font-size: var(--step--1); }
+.statement dd { margin: 0; font-weight: 600; }
+.statement dd.in { color: var(--green); }
+.statement dd.strong { font-size: var(--step-1); }
+
 /* ---------- people ---------- */
 
 .people-grid {
