@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { viteSingleFile } from "vite-plugin-singlefile";
+import { devApi } from "./dev/api-plugin.js";
 
 /**
  * Two build targets.
@@ -15,7 +16,8 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 export default defineConfig(() => {
   const singleFile = process.env["SINGLEFILE"] === "1";
   return {
-    plugins: [react(), ...(singleFile ? [viteSingleFile()] : [])],
+    // devApi only applies on `serve`, so it costs the production build nothing.
+    plugins: [react(), devApi(), ...(singleFile ? [viteSingleFile()] : [])],
     define: {
       "import.meta.env.VITE_ENRICH_MODE": JSON.stringify(singleFile ? "direct" : "proxy"),
     },

@@ -14,8 +14,13 @@ import { parseStatement } from "../parsers/index.js";
 import { load, save } from "../store/store.js";
 import { browserStore } from "./storage.js";
 import { enrichMerchants } from "../enrich/enricher.js";
-import { anthropicTransport } from "../enrich/anthropic.js";
-import { proxyTransport } from "../enrich/proxy.js";
+import { directTransport } from "../enrich/direct.js";
+import { fetchProviders, proxyTransport } from "../enrich/proxy.js";
+import { PROVIDERS, describeProviders } from "../enrich/providers.js";
+import type { ProviderAvailability } from "../enrich/providers.js";
+// Aliased: the hook already exposes `reconcile` for settling a transaction.
+import { loadSettings, reconcile as reconcileSettings, saveSettings } from "./settings.js";
+import type { EnrichmentSettings } from "./settings.js";
 import type {
   Account,
   CategoryId,
@@ -32,6 +37,12 @@ export interface UseLedger {
   status: string | null;
   busy: boolean;
   today: string;
+  /** What this deployment can ask. Empty until /api/providers answers. */
+  providers: readonly ProviderAvailability[];
+  /** Null when nothing is configured — the app then runs on local rules only. */
+  enrichment: EnrichmentSettings | null;
+  chooseProvider(provider: string): void;
+  chooseModel(model: string): void;
   importText(text: string, label: string, fi?: FiId): ImportReport | null;
   loadSamples(samples: readonly { label: string; fi: FiId; text: string }[]): void;
   recategorize(id: TransactionId, category: CategoryId, applyToMerchant: boolean): void;
@@ -48,6 +59,8 @@ export function useLedger(): UseLedger {
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [providers, setProviders] = useState<readonly ProviderAvailability[]>([]);
+  const [enrichment, setEnrichment] = useState<EnrichmentSettings | null>(null);
   const store = useRef(browserStore());
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -59,6 +72,27 @@ export function useLedger(): UseLedger {
       if (r.warning) setStatus(r.warning);
       setReady(true);
     });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Ask the deployment what it can do, then reconcile the stored choice against
+  // it. The single-file build has no function behind it, so its catalogue is
+  // whatever was compiled in and nothing is reported as configured.
+  useEffect(() => {
+    let live = true;
+    const discover = async (): Promise<void> => {
+      const available =
+        import.meta.env.VITE_ENRICH_MODE === "direct"
+          ? describeProviders(() => false)
+          : await fetchProviders();
+      const stored = await loadSettings(store.current);
+      if (!live) return;
+      setProviders(available);
+      setEnrichment(reconcileSettings(stored, available));
+    };
+    void discover();
     return () => {
       live = false;
     };
@@ -147,15 +181,50 @@ export function useLedger(): UseLedger {
     });
   }, []);
 
+  const chooseProvider = useCallback(
+    (provider: string) => {
+      const spec = providers.find((p) => p.id === provider);
+      if (!spec) return;
+      const next: EnrichmentSettings = { provider: spec.id, model: spec.defaultModel };
+      setEnrichment(next);
+      void saveSettings(store.current, next);
+    },
+    [providers]
+  );
+
+  const chooseModel = useCallback((model: string) => {
+    setEnrichment((prev) => {
+      if (!prev) return prev;
+      const next: EnrichmentSettings = { provider: prev.provider, model };
+      void saveSettings(store.current, next);
+      return next;
+    });
+  }, []);
+
   const identifyMerchants = useCallback(async () => {
     const keys = ledger.transactions.map((t) => t.merchantKey);
+    const direct = import.meta.env.VITE_ENRICH_MODE === "direct";
+    if (!direct && !enrichment) {
+      setStatus(
+        "No merchant lookup is configured on this deployment. Every local rule still runs."
+      );
+      return;
+    }
     setBusy(true);
-    // A deployed build routes through our own function so the API key is never
+    // A deployed build routes through our own function so no API key is ever
     // shipped to the browser. The single-file build has no server behind it.
-    const transport =
-      import.meta.env.VITE_ENRICH_MODE === "direct"
-        ? anthropicTransport({ today })
-        : proxyTransport({ today });
+    const provider = enrichment?.provider ?? PROVIDERS[0]!.id;
+    const transport = direct
+      ? directTransport({
+          provider,
+          today,
+          ...(enrichment ? { model: enrichment.model } : {}),
+        })
+      : proxyTransport({
+          provider,
+          today,
+          ...(enrichment ? { model: enrichment.model } : {}),
+        });
     const result = await enrichMerchants(transport, keys, ledger.merchants);
     if (result.facts.length > 0) {
       setLedger((prev) => applyMerchantFacts(prev, result.facts));
@@ -165,12 +234,15 @@ export function useLedger(): UseLedger {
       setStatus("Every merchant is already identified.");
     } else if (result.failed) {
       setStatus(
-        `Identified ${result.facts.length} of ${result.requested}. The rest kept their local categories.`
+        `Identified ${result.facts.length} of ${result.requested}. ${result.error ?? "The rest kept their local categories."}`
       );
     } else {
-      setStatus(`Identified ${result.facts.length} merchants. They are cached from now on.`);
+      const via = providers.find((p) => p.id === enrichment?.provider)?.label ?? "the provider";
+      setStatus(
+        `Identified ${result.facts.length} merchants via ${via}. They are cached from now on.`
+      );
     }
-  }, [ledger.transactions, ledger.merchants, today]);
+  }, [ledger.transactions, ledger.merchants, today, enrichment, providers]);
 
   const reset = useCallback(() => {
     setLedger(emptyLedger());
@@ -184,6 +256,10 @@ export function useLedger(): UseLedger {
     status,
     busy,
     today,
+    providers,
+    enrichment,
+    chooseProvider,
+    chooseModel,
     importText,
     loadSamples,
     recategorize,

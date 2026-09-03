@@ -44,3 +44,20 @@ if (!("ResizeObserver" in globalThis)) {
     disconnect(): void {}
   } as unknown as typeof ResizeObserver;
 }
+
+/**
+ * The app asks /api/providers on mount to find out what this deployment can do.
+ * happy-dom resolves that relative URL against localhost:3000 and tries to open
+ * a socket, so without a default the suite makes real network calls and its
+ * behaviour depends on whether anything happens to be listening.
+ *
+ * Default to "nothing configured", which is the honest answer for a test run.
+ * Tests that care stub fetch themselves and win, because they run later.
+ */
+globalThis.fetch = (async (input: RequestInfo | URL) => {
+  const url = String(input instanceof Request ? input.url : input);
+  if (url.includes("/api/providers")) {
+    return new Response(JSON.stringify({ providers: [] }), { status: 200 });
+  }
+  throw new Error(`Unstubbed fetch in tests: ${url}`);
+}) as typeof fetch;

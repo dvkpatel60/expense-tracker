@@ -25,8 +25,10 @@ src/
     ledger.ts      State transitions and reporting
   parsers/       One file per FI behind a common interface, plus fixtures
   store/         Versioned persistence with migrations
-  enrich/        Merchant lookup behind an injectable transport
-tests/           94 tests
+  enrich/        Merchant lookup behind a provider registry + injectable transport
+  ui/            React. Calls the domain, never reimplements it
+dev/             Local API server (Vite plugin) + in-memory SQLite merchant cache
+tests/           152 tests
 ```
 
 ## Design decisions
@@ -63,6 +65,14 @@ like "Dining" for a person.
 proposals are built against the net position. Sarah owes $40 for dinner, you
 owe $15 for the fare, one $25 transfer closes both.
 
+**Providers are a registry, not a branch.** Adding one is a single entry giving
+its request shape, where the text sits in its response, and which env var holds
+its key. The prompt, the JSON contract, the batching, the cache and the privacy
+filter are shared, so a second provider cannot arrive with a second, subtly
+different version of any of them. The model is validated against the registry
+server-side: it comes in on a request body, and without that check the function
+is an open relay to any model on the account.
+
 **Enrichment is keyed on merchant and injected.** Only normalized merchant
 strings cross the network — no amounts, dates, balances, account numbers or
 counterparty names. `redactForLookup` enforces it and a test asserts the request
@@ -72,7 +82,6 @@ body contains no dates or balances.
 
 - FX: `originalAmount` is carried on `RawRow` and `Transaction` but no
   conversion or fee attribution is implemented. USD rows import at face value.
-- No UI. Next step.
 - Person merge/unmerge is modelled (`Person.aliases`) but has no operation yet.
 - Enrichment has no rate limiting or retry.
 
@@ -95,10 +104,14 @@ nothing needs configuring in the dashboard except one variable:
 
 | Variable | Where | Purpose |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Site settings > Environment variables | Read by the merchant lookup function at request time |
+| `ANTHROPIC_API_KEY` | Site settings > Environment variables | Enables the Anthropic models |
+| `GEMINI_API_KEY` | Site settings > Environment variables | Enables the Gemini models |
 
-Leave it unset and the app still works — every local rule still runs, and
-merchant identification returns 503 with a message saying it is not configured.
+Set either, both, or neither. The provider picker in the app is built from
+`/api/providers`, which reports which keys are present — so a provider appears
+exactly when it is configured. With none set the app still works: every local
+rule runs and merchant identification returns 503 with a message naming what to
+set.
 
 ### Why there is a serverless function
 
@@ -118,9 +131,25 @@ exfiltrate to a third-party origin from the page.
   open from disk. No server behind it, so merchant lookup only works where
   something else supplies credentials.
 
+## Running it locally
+
+```
+cp .env.example .env    # then fill in whichever keys you have
+npm run dev
+```
+
+`npm run dev` runs `scripts/dev.sh`, which loads `.env`, prints which providers
+are configured and starts Vite. A dev-only Vite plugin serves `/api/enrich` and
+`/api/providers` from the same port using the same function source Netlify
+bundles — so the one part of the app that talks to a provider is not the one
+part you can only test by deploying. Lookups are cached in an in-memory SQLite
+table for the life of the process, because a dev session is dozens of reloads
+and each one would otherwise re-buy the same identifications.
+
 ## Commands
 
 ```
 npm run typecheck   # tsc --noEmit, strict + noUncheckedIndexedAccess
 npm test            # vitest
+npm run verify      # typecheck + test + build
 ```

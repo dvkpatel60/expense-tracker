@@ -15,5 +15,6 @@ Strings:
 ${keys.map((k) => "- " + k).join("\n")}`;
 }
 
-export const ENRICHMENT_MODEL = "claude-sonnet-5";
+/** Server-side cap. The client batches well below this; the ceiling exists so
+ *  one request cannot be inflated into an expensive one. */
 export const MAX_MERCHANTS_PER_REQUEST = 120;

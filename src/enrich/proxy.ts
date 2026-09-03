@@ -1,16 +1,21 @@
-import { parseResponse } from "./anthropic.js";
+import { coerceFacts } from "./facts.js";
+import type { ProviderAvailability, ProviderId } from "./providers.js";
 import type { EnrichmentTransport } from "./types.js";
 
 /**
- * Talks to our own serverless function instead of Anthropic directly.
+ * Talks to our own serverless function instead of a provider directly.
  *
  * This is the shape any real deployment needs: an API key cannot live in a
- * browser bundle, so the key stays on the server and the client posts nothing
- * but a list of merchant strings. The function returns the Anthropic response
- * untouched, so the same defensive parser handles both paths.
+ * browser bundle, so keys stay on the server and the client posts nothing but a
+ * list of merchant strings plus which provider to ask.
+ *
+ * The function normalizes before responding, so provider envelopes never reach
+ * the browser — adding a provider changes nothing on this side of the wire.
  */
 export function proxyTransport(config: {
   endpoint?: string;
+  provider: ProviderId;
+  model?: string;
   today: string;
   fetchImpl?: typeof fetch;
 }): EnrichmentTransport {
@@ -22,13 +27,48 @@ export function proxyTransport(config: {
       const res = await doFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ merchants: keys }),
+        body: JSON.stringify({
+          merchants: keys,
+          provider: config.provider,
+          ...(config.model ? { model: config.model } : {}),
+        }),
       });
-      if (res.status === 503) {
-        throw new Error("Merchant lookup is not configured on this deployment.");
-      }
-      if (!res.ok) throw new Error(`Lookup failed with status ${res.status}`);
-      return parseResponse(await res.json(), config.today);
+      if (!res.ok) throw new Error(await explain(res));
+      const data: unknown = await res.json();
+      return coerceFacts((data as { facts?: unknown })?.facts, config.today);
     },
   };
+}
+
+/** The function explains itself in the body; surfacing that beats a bare code,
+ *  because "not configured" and "rate limited" need different reactions. */
+async function explain(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    if (typeof body.error === "string" && body.error) return body.error;
+  } catch {
+    /* fall through to the status */
+  }
+  return `Lookup failed with status ${res.status}`;
+}
+
+/**
+ * Which providers this deployment can actually use. Returns an empty list
+ * rather than throwing: no lookup is a degraded mode, not a broken app.
+ */
+export async function fetchProviders(config: {
+  endpoint?: string;
+  fetchImpl?: typeof fetch;
+} = {}): Promise<ProviderAvailability[]> {
+  const endpoint = config.endpoint ?? "/api/providers";
+  const doFetch = config.fetchImpl ?? fetch;
+  try {
+    const res = await doFetch(endpoint);
+    if (!res.ok) return [];
+    const data: unknown = await res.json();
+    const list = (data as { providers?: unknown })?.providers;
+    return Array.isArray(list) ? (list as ProviderAvailability[]) : [];
+  } catch {
+    return [];
+  }
 }

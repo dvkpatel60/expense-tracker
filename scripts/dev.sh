@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#
+# Local startup. Loads .env, reports which providers are configured, then hands
+# off to Vite — which serves the app and the /api functions from one process.
+#
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [ ! -f .env ]; then
+  echo "No .env found. Creating one from .env.example."
+  cp .env.example .env
+  echo "  -> Fill in a key in .env, then run this again."
+  echo "     The app still runs without one; merchant identification is just disabled."
+  echo
+fi
+
+# Export every assignment in .env without executing it as a script.
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
+
+configured=()
+[ -n "${ANTHROPIC_API_KEY:-}" ] && configured+=("Anthropic")
+[ -n "${GEMINI_API_KEY:-}" ]    && configured+=("Gemini")
+
+if [ ${#configured[@]} -eq 0 ]; then
+  echo "Providers configured: none — merchant identification will be disabled."
+  echo "                      (add ANTHROPIC_API_KEY or GEMINI_API_KEY to .env)"
+else
+  echo "Providers configured: ${configured[*]}"
+fi
+echo "Merchant lookups are cached in memory for the life of this process."
+echo
+
+exec npx vite "$@"

@@ -26,6 +26,9 @@
   "include": [
     "src",
     "tests",
-    "netlify"
+    "netlify",
+    "dev",
+    "vite.config.ts",
+    "vitest.config.ts"
   ]
 }

@@ -1,7 +1,20 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/ui/App.js";
+import { describeProviders } from "../src/enrich/providers.js";
+
+/** Stand in for a deployment where only the named providers have a key set. */
+function deploymentOffering(...configured: string[]): void {
+  const providers = describeProviders((spec) => configured.includes(spec.id));
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes("/api/providers")) {
+      return new Response(JSON.stringify({ providers }), { status: 200 });
+    }
+    throw new Error(`Unstubbed fetch: ${url}`);
+  });
+}
 
 /**
  * End-to-end through the real UI: load the fixtures, split a bill, settle it.
@@ -17,6 +30,10 @@ async function boot() {
 
 beforeEach(() => {
   window.localStorage.clear();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("App", () => {
@@ -64,6 +81,47 @@ describe("App", () => {
     expect(note.textContent).toContain("$107.30");
     // Cash out is unchanged; only the share moved.
     expect(note.textContent).toContain(String(cashOutBefore?.match(/\$[\d,.]+/)?.[0] ?? ""));
+  });
+
+  it("offers only the providers the deployment has keys for", async () => {
+    deploymentOffering("gemini");
+    const user = await boot();
+    await user.click(screen.getByRole("button", { name: /^Import/ }));
+
+    const provider = (await screen.findByLabelText("Provider")) as HTMLSelectElement;
+    const offered = Array.from(provider.options).map((o) => o.textContent);
+    expect(offered).toContain("Google Gemini");
+    expect(offered).not.toContain("Anthropic");
+
+    // And the model list follows the chosen provider.
+    const model = screen.getByLabelText("Model") as HTMLSelectElement;
+    expect(Array.from(model.options).map((o) => o.value)).toContain("gemini-2.5-flash");
+    expect(Array.from(model.options).map((o) => o.value)).not.toContain("claude-sonnet-5");
+  });
+
+  it("remembers the chosen model across a reload", async () => {
+    deploymentOffering("gemini");
+    const user = await boot();
+    await user.click(screen.getByRole("button", { name: /^Import/ }));
+    await user.selectOptions(await screen.findByLabelText("Model"), "gemini-2.0-flash-lite");
+
+    // Remount rather than re-boot: the ledger is persisted by now, so a fresh
+    // App is no longer on the welcome screen.
+    cleanup();
+    const again = userEvent.setup();
+    render(<App />);
+    await again.click(await screen.findByRole("button", { name: /^Import/ }));
+    const model = (await screen.findByLabelText("Model")) as HTMLSelectElement;
+    expect(model.value).toBe("gemini-2.0-flash-lite");
+  });
+
+  it("says so plainly when no provider is configured", async () => {
+    deploymentOffering();
+    const user = await boot();
+    await user.click(screen.getByRole("button", { name: /^Import/ }));
+    expect(await screen.findByText(/not configured/i)).toBeTruthy();
+    expect(screen.getByText(/GEMINI_API_KEY/)).toBeTruthy();
+    expect(screen.queryByLabelText("Provider")).toBeNull();
   });
 
   it("settles a claim from an incoming e-transfer", async () => {

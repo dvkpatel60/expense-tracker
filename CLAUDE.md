@@ -27,8 +27,9 @@ them. Read it before changing `normalize.ts`, `split.ts`, or `pairing.ts`.
 ## Commands
 
 ```
-npm run dev              # Vite dev server
-npm test                 # vitest run — 10 files, 107 tests
+npm run dev              # ./scripts/dev.sh — loads .env, serves app + /api on one port
+npm run dev:vite         # plain Vite, no /api routes
+npm test                 # vitest run — 13 files, 152 tests
 npm run test:watch
 npm run typecheck        # tsc --noEmit
 npm run verify           # typecheck + test + build. Run this before claiming done.
@@ -60,13 +61,19 @@ ui/  →  parsers/ · store/ · enrich/  →  core/
   silently.
 - **`store/`** — versioned persistence behind `KeyValueStore`. Never touches `localStorage`
   directly; `ui/storage.ts` supplies the browser implementation.
-- **`enrich/`** — merchant identification behind `EnrichmentTransport`. Two transports
-  (`proxy.ts` for deployed builds, `anthropic.ts` for the single-file build) share one
-  defensive `parseResponse`.
+- **`enrich/`** — merchant identification behind `EnrichmentTransport`. `providers.ts` is
+  the registry: every provider difference (request shape, where the text lives, which env
+  var holds the key) is one entry, while the prompt, JSON contract, batching, cache and
+  privacy filter stay shared. `facts.ts` parses the model's array once for everyone;
+  `proxy.ts` is the deployed path, `direct.ts` the single-file one.
 - **`ui/`** — React. All domain logic is called, never reimplemented.
+- **`dev/`** — the local API server (a Vite plugin) and its in-memory SQLite merchant
+  cache. Dev-only by construction: `devApi()` is `apply: "serve"` and `better-sqlite3` is a
+  devDependency, so neither reaches the production bundle or the Netlify functions.
 
-`netlify/functions/enrich.mts` imports from `src/enrich/prompt.js` so the prompt, model id
-and batch cap cannot drift between client and server.
+`netlify/functions/enrich.mts` and `providers.mts` import from `src/enrich/` so the prompt,
+the provider registry and the batch cap cannot drift between client and server. Netlify
+bundles those `.mts` files with esbuild, which resolves the `.js` specifiers to `.ts`.
 
 ## State model
 
@@ -135,6 +142,21 @@ skipped, never fatal. A manual override writes a user rule at priority 1000 so t
 import of that merchant lands correctly, and enrichment must never overwrite
 `categorySource === "user"`.
 
+## Adding a provider
+
+One entry in `PROVIDERS` (`src/enrich/providers.ts`): `buildRequest` (url, headers, body),
+`extractText` (unwrap the envelope), and `envVar`. Nothing else changes — the picker is
+built from `/api/providers`, so a provider appears in the UI exactly when its key is set on
+the deployment, and disappears when it is removed.
+
+Two rules the registry enforces and a new provider must not route around:
+
+- **The model is validated against the catalogue** (`resolveModel`). It arrives in a request
+  body; without the check the function is an open relay to any model on the account.
+- **`MAX_OUTPUT_TOKENS` is shared.** A ceiling below the batch cap truncates the JSON
+  mid-array, which fails the whole batch rather than shortening it — the response cannot be
+  parsed at all.
+
 ## The privacy boundary
 
 Only normalized merchant strings cross the network. Amounts, dates, balances, account
@@ -148,12 +170,17 @@ in three places and all three must stay in sync:
 3. `netlify.toml` — CSP sets `connect-src 'self'`, so nothing on the page can reach a
    third-party origin.
 
+The function also normalizes the provider's response before replying, so provider envelopes
+never reach the browser, and `/api/providers` reports env var *names* and whether a key is
+present — never a value.
+
 `tests/enrich.test.ts` asserts no dates or balances appear in the request body. Keep that
 assertion honest when changing the transport.
 
-The API key lives only in the Netlify env var `ANTHROPIC_API_KEY`. Unset, the app still
-works fully on local rules and lookup returns 503 with a message. `VITE_ENRICH_MODE` is
-defined by `vite.config.ts` and selects `proxyTransport` vs `anthropicTransport`.
+API keys live only in env vars — `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (see `.env.example`,
+and Netlify site settings for the deploy). With none set the app still works fully on local
+rules and lookup returns 503 with a message naming what to set. `VITE_ENRICH_MODE` is
+defined by `vite.config.ts` and selects `proxyTransport` vs `directTransport`.
 
 ## Testing notes
 
@@ -167,6 +194,9 @@ defined by `vite.config.ts` and selects `proxyTransport` vs `anthropicTransport`
   rendered.
 - `ui/samples.ts` imports the same `__fixtures__` CSVs via `?raw`, so the demo exercises
   the production code path.
+- `tests/setup.ts` also stubs `fetch` to answer `/api/providers` with an empty list. The app
+  calls it on mount, and happy-dom would otherwise resolve that relative URL against
+  localhost and open a real socket. Tests that care stub `fetch` themselves and win.
 
 ## Repository state
 

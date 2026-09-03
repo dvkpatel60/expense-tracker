@@ -606,6 +606,8 @@ function Import({ L }: { L: ReturnType<typeof useLedger> }) {
         </section>
       )}
 
+      <MerchantLookup L={L} />
+
       <p className="fine">
         Everything stays on this device. Re-importing an overlapping date range is safe —
         rows are fingerprinted, so duplicates are skipped. When merchants are identified,
@@ -613,5 +615,82 @@ function Import({ L }: { L: ReturnType<typeof useLedger> }) {
         numbers and people&rsquo;s names never are.
       </p>
     </>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+
+/**
+ * Provider and model picker. Built from what the deployment reports rather than
+ * from a list compiled into the bundle, so configuring a key is the only step
+ * needed to make a provider appear here.
+ */
+function MerchantLookup({ L }: { L: ReturnType<typeof useLedger> }) {
+  const usable = L.providers.filter((p) => p.configured);
+  const active = usable.find((p) => p.id === L.enrichment?.provider) ?? null;
+
+  return (
+    <section className="section">
+      <h2 className="section-title">Merchant identification</h2>
+
+      {usable.length === 0 ? (
+        <div className="card">
+          <div className="row">
+            <div className="row-body">
+              <div className="row-title">Not configured</div>
+              <div className="row-sub">
+                {L.providers.length === 0
+                  ? "No lookup service is available in this build."
+                  : `Set ${L.providers.map((p) => p.envVar).join(" or ")} to enable it.`}{" "}
+                Every local rule still runs without it.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="field-label">Provider</div>
+          <select
+            className="select"
+            aria-label="Provider"
+            value={L.enrichment?.provider ?? ""}
+            onChange={(e) => L.chooseProvider(e.target.value)}
+          >
+            {usable.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+
+          <div className="field-label" style={{ marginTop: "0.9rem" }}>
+            Model
+          </div>
+          <select
+            className="select"
+            aria-label="Model"
+            value={L.enrichment?.model ?? ""}
+            onChange={(e) => L.chooseModel(e.target.value)}
+          >
+            {(active?.models ?? []).map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+                {m.note ? ` — ${m.note}` : ""}
+              </option>
+            ))}
+          </select>
+
+          <div className="btn-stack">
+            <button
+              className="btn secondary"
+              disabled={L.busy || L.ledger.transactions.length === 0}
+              onClick={() => void L.identifyMerchants()}
+            >
+              {L.busy ? "Identifying…" : "Identify merchants"}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
