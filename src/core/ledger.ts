@@ -3,6 +3,7 @@ import type { Cents } from "./money.js";
 import { BUILTIN_RULES, categorize, groupOf } from "./categorize.js";
 import type { GroupId } from "./categorize.js";
 import { parseETransfer } from "./etransfer.js";
+import { previousPeriod } from "./digest.js";
 import { normalizeMerchant } from "./normalize.js";
 import { observePerson, titleCase } from "./people.js";
 import { pairInternalTransfers } from "./pairing.js";
@@ -427,6 +428,77 @@ export interface GroupTotal {
   readonly transactionCount: number;
   /** The categories inside it, already sorted, so a drill-down needs no second pass. */
   readonly categories: readonly CategoryTotal[];
+}
+
+/** Richer KPIs: per-transaction and per-day spend, plus the share of claims
+ *  that have been closed. These are computed on the fly from the same spend
+ *  pipeline as categoryTotals, so they can never disagree with the totals. */
+
+export interface ActivityKpis {
+  readonly avgTransactionTotal: Cents;
+  readonly spendingVelocity: Cents;
+  readonly settlementRate: number;
+  readonly splitSharePercent: number;
+}
+
+/** Average transaction size on spend, account-currency cents — the mean of the
+ *  cash figures, since that is the number a statement shows. */
+export function avgTransactionTotal(state: LedgerState, period: string | null): Cents {
+  const spend = spendIn(state, period);
+  if (spend.length === 0) return ZERO;
+  return cents(Math.round(-sum(spend.map((t) => t.amount)) / spend.length));
+}
+
+/** Daily spend rate: cash out divided by the number of distinct calendar days
+ *  the ledger spans in the period. Uses the spend so paired transfers don't
+ *  inflate the figure. */
+export function spendingVelocity(state: LedgerState, period: string | null): Cents {
+  const spend = spendIn(state, period);
+  if (spend.length === 0) return ZERO;
+  const days = distinctDays(spend.map((t) => t.date));
+  if (days === 0) return ZERO;
+  return cents(Math.round(-sum(spend.map((t) => t.amount)) / days));
+}
+
+/** 0..1 — the fraction of all non-void claims that have been settled. */
+export function settlementRate(state: LedgerState): number {
+  const total = state.claims.filter((c) => c.status !== "void").length;
+  if (total === 0) return 0;
+  const settled = state.claims.filter((c) => c.status === "settled").length;
+  return settled / total;
+}
+
+/** 0..1 — of this period's spend, how much is meant for other people (the
+ *  share covered by others, not you). */
+export function splitSharePercent(state: LedgerState, period: string | null): number {
+  const t = periodTotals(state, period);
+  if (t.cashOut === 0) return 0;
+  return -t.recovered / -t.cashOut;
+}
+
+/** The largest single category increase (by your share) against the previous
+ *  period. Returns null when there is no prior period or nothing grew. */
+export function topCategoryDelta(
+  state: LedgerState,
+  period: string
+): { categoryId: CategoryId; current: Cents; previous: Cents; delta: Cents } | null {
+  const priorPeriod = previousPeriod(period);
+  if (priorPeriod === null) return null;
+  const current = categoryTotals(state, period);
+  const prior = new Map(categoryTotals(state, priorPeriod).map((c) => [c.categoryId, c.yourShare]));
+  let best: { categoryId: CategoryId; current: Cents; previous: Cents; delta: Cents } | null = null;
+  for (const c of current) {
+    const prev = prior.get(c.categoryId) ?? ZERO;
+    const delta = c.yourShare - prev;
+    if (delta > 0 && (!best || delta > best.delta)) {
+      best = { categoryId: c.categoryId, current: c.yourShare, previous: prev, delta: cents(delta) };
+    }
+  }
+  return best;
+}
+
+function distinctDays(dates: readonly string[]): number {
+  return new Set(dates).size;
 }
 
 /** The same report as categoryTotals, one level up. Built from it rather than

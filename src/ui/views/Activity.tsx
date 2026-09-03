@@ -2,11 +2,18 @@ import { useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { effectiveAmount } from "../../core/split.js";
+import {
+  avgTransactionTotal,
+  categoryTotals,
+  periodTotals,
+  splitSharePercent,
+} from "../../core/ledger.js";
+import { detectRecurring } from "../../core/recurring.js";
 import type { CategoryId, Transaction } from "../../core/types.js";
 import { categoryColor, dayLabel, dollarsAbs } from "../format.js";
 import type { UseLedger } from "../useLedger.js";
 
-export type Filter = "all" | "unsplit" | "split" | "transfers" | "review";
+export type Filter = "all" | "unsplit" | "split" | "transfers" | "review" | "recurring";
 
 /** What another view wants Activity opened on: a kind of row, a category, or
  *  both. Real lifted state — it used to be a module-scope variable, which is
@@ -22,6 +29,7 @@ const KIND_FILTERS: readonly (readonly [Filter, string])[] = [
   ["split", "Split"],
   ["transfers", "e-Transfers"],
   ["review", "Needs a category"],
+  ["recurring", "Recurring"],
 ];
 
 export function Activity({
@@ -42,6 +50,20 @@ export function Activity({
   const [account, setAccount] = useState<string>("all");
   const [query, setQuery] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // A one-line read on what this period was, so a row list is never the only
+  // thing on the screen. Mirrors the KPIs on Overview but lives where users
+  // are actually looking at rows.
+  const summary = useMemo(() => {
+    const totals = periodTotals(L.ledger, period);
+    const categories = categoryTotals(L.ledger, period).slice(0, 3);
+    return {
+      totals,
+      avg: avgTransactionTotal(L.ledger, period),
+      split: splitSharePercent(L.ledger, period),
+      top: categories,
+    };
+  }, [L.ledger, period]);
 
   const inPeriod = useMemo(
     () => L.ledger.transactions.filter((t) => period === null || t.date.startsWith(period)),
@@ -70,6 +92,10 @@ export function Activity({
       );
     if (filter === "transfers") list = list.filter((t) => t.kind.startsWith("etransfer"));
     if (filter === "review") list = list.filter((t) => t.categoryId === "Uncategorized");
+    if (filter === "recurring") {
+      const recurringKeys = new Set(detectRecurring(L.ledger, period).map((r) => r.merchantKey));
+      list = list.filter((t) => recurringKeys.has(t.merchantKey));
+    }
     if (categories.length > 0) list = list.filter((t) => categories.includes(t.categoryId));
     if (account !== "all") list = list.filter((t) => t.accountId === account);
     if (query.trim()) {
@@ -100,6 +126,46 @@ export function Activity({
 
   return (
     <>
+      <div className="activity-summary" aria-label="Period summary">
+        <div className="as-figure">
+          <span className="as-label">Cash out</span>
+          <span className="as-value num">{dollarsAbs(summary.totals.cashOut)}</span>
+        </div>
+        <div className="as-figure">
+          <span className="as-label">Transactions</span>
+          <span className="as-value num">{summary.totals.transactionCount}</span>
+        </div>
+        <div className="as-figure">
+          <span className="as-label">Avg size</span>
+          <span className="as-value num">{dollarsAbs(summary.avg)}</span>
+        </div>
+        {summary.split > 0 && (
+          <div className="as-figure">
+            <span className="as-label">Split with others</span>
+            <span className="as-value num">{Math.round(summary.split * 100)}%</span>
+          </div>
+        )}
+        {summary.top.length > 0 && (
+          <div className="as-top">
+            <span className="as-label">Top</span>
+            <div className="as-chips">
+              {summary.top.map((c) => (
+                <button
+                  key={c.categoryId}
+                  className="filter cat"
+                  style={{ "--chipc": categoryColor(c.categoryId) } as CSSProperties}
+                  aria-pressed={categories.includes(c.categoryId)}
+                  onClick={() => toggleCategory(c.categoryId)}
+                >
+                  <i />
+                  {c.categoryId}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="facets">
         <div className="facet-row">
           <input

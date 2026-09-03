@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { categoryTotals, groupTotals, needsAttention, periodTotals, spendIn } from "../../core/ledger.js";
+import { categoryTotals, groupTotals, needsAttention, periodTotals, spendIn, avgTransactionTotal, spendingVelocity, settlementRate, topCategoryDelta } from "../../core/ledger.js";
 import type { GroupTotal } from "../../core/ledger.js";
+import { detectRecurring } from "../../core/recurring.js";
 import { previousPeriod } from "../../core/digest.js";
 import { cents } from "../../core/money.js";
 import type { Cents } from "../../core/money.js";
@@ -10,7 +11,7 @@ import { CategoryLens } from "../components/CategoryLens.js";
 import { InsightsPanel } from "../components/InsightsPanel.js";
 import { ProportionBar, SpendChart } from "../components/SpendChart.js";
 import { Money } from "../components/Money.js";
-import { categoryColor, dollarsAbs, monthLabel } from "../format.js";
+import { categoryColor, dollarsAbs, dayLabel, monthLabel } from "../format.js";
 import type { UseLedger } from "../useLedger.js";
 import type { ActivityIntent } from "./Activity.js";
 
@@ -31,6 +32,11 @@ export function Overview({
   const spend = spendIn(L.ledger, period);
   const attention = needsAttention(L.ledger, L.today);
   const groups = groupTotals(L.ledger, period);
+  const avg = avgTransactionTotal(L.ledger, period);
+  const velocity = spendingVelocity(L.ledger, period);
+  const settleRate = settlementRate(L.ledger);
+  const top = period === null ? null : topCategoryDelta(L.ledger, period);
+  const recurring = detectRecurring(L.ledger, period);
   const [drilled, setDrilled] = useState<GroupTotal | null>(null);
   const [lens, setLens] = useState<{ categoryId: string; anchor: DOMRect } | null>(null);
 
@@ -73,6 +79,38 @@ export function Overview({
               )
             }
           />
+          <Kpi
+            label="Avg transaction"
+            value={avg}
+            sub={avg > 0 ? <>across {totals.transactionCount} purchases</> : <>no spend this period</>}
+          />
+          <Kpi
+            label="Spending velocity"
+            value={velocity}
+            sub={velocity > 0 ? <>per calendar day in this period</> : <>no spend this period</>}
+          />
+          <Kpi
+            label="Settlement rate"
+            value={cents(0)}
+            raw={`${Math.round(settleRate * 100)}%`}
+            sub={
+              <>of claims closed to date</>
+            }
+          />
+          {top && (
+            <Kpi
+              label="Biggest category jump"
+              value={cents(Math.abs(top.delta))}
+              sub={
+                <>
+                  <span className={top.delta > 0 ? "delta-up" : "delta-down"}>
+                    {top.categoryId}
+                  </span>{" "}
+                  vs last month
+                </>
+              }
+            />
+          )}
         </div>
 
         <section className="panel">
@@ -144,6 +182,25 @@ export function Overview({
       <div className="ov-rail">
         <InsightsPanel L={L} period={period} onGoto={onGoto} />
 
+        {recurring.length > 0 && (
+          <section className="panel recurring">
+            <div className="panel-head">
+              <h2 className="panel-title">Recurring</h2>
+              <p className="panel-sub">Same merchants, steady cadence — subscriptions & bills</p>
+            </div>
+            {recurring.map((r) => (
+              <div className="row recur" key={r.merchantKey}>
+                <div className="row-body">
+                  <div className="row-title">{r.merchantName}</div>
+                  <div className="row-sub">
+                    {r.frequency} · {dollarsAbs(r.avgAmount)} · next {dayLabel(r.nextExpected)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
         {attention.length > 0 && (
           <section className="panel attention">
             <div className="panel-head">
@@ -209,16 +266,18 @@ function Kpi({
   value,
   sub,
   hero = false,
+  raw,
 }: {
   label: string;
   value: Cents;
   sub: ReactNode;
   hero?: boolean;
+  raw?: string;
 }) {
   return (
     <div className={hero ? "kpi hero-kpi" : "kpi"}>
       <div className="kpi-label">{label}</div>
-      <Money className="kpi-value" value={value} />
+      {raw ? <div className="kpi-value">{raw}</div> : <Money className="kpi-value" value={value} />}
       <div className="kpi-sub">{sub}</div>
     </div>
   );

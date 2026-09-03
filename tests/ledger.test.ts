@@ -3,14 +3,16 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { cents } from "../src/core/money.js";
 import {
-  applyMerchantFacts, applySplit, categoryTotals, counterClock, editAccount, emptyLedger,
-  importRows, mergePeople, needsAttention, periodTotals, personBalances, setCategory, settle,
-  spendIn, unmergePerson,
+  applyMerchantFacts, applySplit, avgTransactionTotal, categoryTotals, counterClock,
+  editAccount, emptyLedger, importRows, mergePeople, needsAttention, periodTotals,
+  personBalances, setCategory, settle, spendIn, spendingVelocity, settlementRate,
+  splitSharePercent, topCategoryDelta, unmergePerson,
 } from "../src/core/ledger.js";
 import type { LedgerState } from "../src/core/ledger.js";
 import { parseStatement } from "../src/parsers/index.js";
 import type { Account, Claim, Person, Transaction } from "../src/core/types.js";
 import { observePerson } from "../src/core/people.js";
+import { detectRecurring } from "../src/core/recurring.js";
 
 const fixture = (n: string): string =>
   readFileSync(join(__dirname, "../src/parsers/__fixtures__", n), "utf8");
@@ -352,3 +354,139 @@ describe("unmergePerson", () => {
     expect(unmergePerson(state, "person:nope", "S", []).person).toBeNull();
   });
 });
+
+describe("richer KPIs (task-06)", () => {
+  it("avgTransactionTotal is the mean of cash spend in the period", () => {
+    const state = loadAll();
+    const avg = avgTransactionTotal(state, "2026-07");
+    const spend = spendIn(state, "2026-07");
+    if (spend.length === 0) {
+      // Not present in the fixtures; assert the empty-period zero instead.
+      expect(avgTransactionTotal(state, "1999-01")).toBe(0);
+      return;
+    }
+    const expected = Math.round(-spend.reduce((n, t) => n + t.amount, 0) / spend.length);
+    expect(avg).toBe(expected);
+  });
+
+  it("spendingVelocity divides cash out by distinct calendar days", () => {
+    let people: readonly Person[] = [];
+    const txA: Transaction = { id: "tx:0", importHash: "h0", accountId: "acct:r", fi: "rbc",
+      date: "2026-07-01", amount: cents(-10000), currency: "CAD", rawDescription: "a",
+      merchantKey: "m-a", merchantName: "A", merchantSource: "rule", categoryId: "Dining",
+      categorySource: "rule", kind: "purchase" };
+    const txB: Transaction = { id: "tx:1", importHash: "h1", accountId: "acct:r", fi: "rbc",
+      date: "2026-07-10", amount: cents(-20000), currency: "CAD", rawDescription: "b",
+      merchantKey: "m-b", merchantName: "B", merchantSource: "rule", categoryId: "Dining",
+      categorySource: "rule", kind: "purchase" };
+    const state: LedgerState = { ...emptyLedger(), transactions: [txA, txB] };
+    // 2 distinct days, 30000 in cash out -> 15000/day.
+    expect(spendingVelocity(state, "2026-07")).toBe(15000);
+  });
+
+  it("settlementRate is the fraction of non-void claims that are settled", () => {
+    const claim = (id: string, status: Claim["status"]): Claim => ({
+      id, transactionId: "tx:" + id, personId: "person:x", amount: cents(100),
+      direction: "they_owe_me", status, createdOn: "2026-01-01",
+    });
+    const state: LedgerState = {
+      ...emptyLedger(),
+      claims: [claim("a", "open"), claim("b", "settled"), claim("c", "settled"), claim("d", "void")],
+    };
+    // 3 non-void, 2 settled.
+    expect(settlementRate(state)).toBeCloseTo(2 / 3);
+  });
+
+  it("splitSharePercent is recovered over cash out", () => {
+    let people: readonly Person[] = [];
+    ({ people } = observePerson(people, "Sarah McKenna"));
+    const tx: Transaction = { id: "tx:0", importHash: "h0", accountId: "acct:r", fi: "rbc",
+      date: "2026-07-01", amount: cents(-4000), currency: "CAD", rawDescription: "dinner",
+      merchantKey: "m", merchantName: "Diner", merchantSource: "rule", categoryId: "Dining",
+      categorySource: "rule", kind: "purchase", personId: people[0]!.id };
+    const claim: Claim = { id: "cl:0", transactionId: "tx:0", personId: people[0]!.id,
+      amount: cents(2000), direction: "they_owe_me", status: "open", createdOn: "2026-07-01" };
+    const state: LedgerState = { ...emptyLedger(), people, transactions: [tx], claims: [claim] };
+    // 4000 out, 2000 recovered -> 0.5
+    expect(splitSharePercent(state, "2026-07")).toBeCloseTo(0.5);
+  });
+
+  it("topCategoryDelta finds the largest category growth vs the prior period", () => {
+    // One category with a big month-over-month jump in your share.
+    const tx = (id: string, date: string, merchant: string, cat: string, amount: number): Transaction => ({
+      id, importHash: id, accountId: "acct:r", fi: "rbc", date,
+      amount: cents(-amount), currency: "CAD", rawDescription: merchant,
+      merchantKey: merchant, merchantName: merchant, merchantSource: "rule",
+      categoryId: cat, categorySource: "rule", kind: "purchase",
+    });
+    let people: readonly Person[] = [];
+    ({ people } = observePerson(people, "Sarah McKenna"));
+    const trans = [
+      tx("a", "2026-06-03", "netflix", "Subscriptions", 1500),
+      tx("b", "2026-07-03", "netflix", "Subscriptions", 1500),
+      tx("c", "2026-07-05", "uber", "Transport", 800),
+    ];
+    const state: LedgerState = { ...emptyLedger(), people, transactions: trans };
+    // Netflix: prior 1500, current 1500 -> delta 0. Transport: not in prior, current 800 -> delta 800.
+    const top = topCategoryDelta(state, "2026-07");
+    expect(top).not.toBeNull();
+    expect(top!.categoryId).toBe("Transport");
+    expect(top!.delta).toBe(800);
+  });
+});
+
+describe("recurring detection (task-07)", () => {
+  function monthlyTxs(n: number, interval: number, start = "2026-01-05"): Transaction[] {
+    const out: Transaction[] = [];
+    let date = start;
+    for (let i = 0; i < n; i++) {
+      out.push({
+        id: "tx:" + i, importHash: "h" + i, accountId: "acct:r", fi: "rbc",
+        date, amount: cents(-1500), currency: "CAD", rawDescription: "netflix",
+        merchantKey: "netflix", merchantName: "Netflix", merchantSource: "rule",
+        categoryId: "Subscriptions", categorySource: "rule", kind: "purchase",
+      });
+      date = addDays(date, interval);
+    }
+    return out;
+  }
+
+  it("flags a monthly merchant with 3+ transactions that recur every ~30 days", () => {
+    const txs = monthlyTxs(4, 30, "2026-01-05"); // Jan 5, Feb 4, Mar 6, Apr 5
+    const state: LedgerState = { ...emptyLedger(), transactions: txs };
+    const rec = detectRecurring(state, null);
+    expect(rec.length).toBe(1);
+    expect(rec[0]!.merchantKey).toBe("netflix");
+    expect(rec[0]!.frequency).toBe("monthly");
+    expect(rec[0]!.avgAmount).toBe(1500);
+  });
+
+  it("ignores merchants with fewer than three occurrences", () => {
+    const txs = monthlyTxs(2, 30);
+    const state: LedgerState = { ...emptyLedger(), transactions: txs };
+    expect(detectRecurring(state, null)).toHaveLength(0);
+  });
+
+  it("ignores merchants with irregular intervals (not a steady cadence)", () => {
+    const txs = [
+      { ...monthlyTxs(1, 30)[0]!, date: "2026-01-01" },
+      { ...monthlyTxs(1, 30)[0]!, id: "tx:9", date: "2026-01-20" },
+      { ...monthlyTxs(1, 30)[0]!, id: "tx:8", date: "2026-02-10" },
+    ];
+    const state: LedgerState = { ...emptyLedger(), transactions: txs };
+    expect(detectRecurring(state, null)).toHaveLength(0);
+  });
+
+  it("is limited to the requested period", () => {
+    const txs = monthlyTxs(3, 30, "2025-12-05"); // Dec, Jan, Feb
+    const state: LedgerState = { ...emptyLedger(), transactions: txs };
+    // Only December has >=3 within the period? Actually all within null. With 2025-12 only 1.
+    expect(detectRecurring(state, "2025-12")).toHaveLength(0);
+    expect(detectRecurring(state, null).length).toBeGreaterThan(0);
+  });
+});
+
+function addDays(date: string, days: number): string {
+  const d = new Date(Date.parse(date + "T00:00:00Z") + days * 86_400_000);
+  return d.toISOString().slice(0, 10);
+}

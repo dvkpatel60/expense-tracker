@@ -662,6 +662,25 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
 
 /* ---------- activity: facets + table ---------- */
 
+.activity-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.as-figure { display: flex; flex-direction: column; gap: 0.1rem; min-width: 5.5rem; }
+.as-label { color: var(--ink-3); font-size: var(--step--2); text-transform: uppercase; letter-spacing: 0.04em; }
+.as-value { font-size: var(--step-1); font-weight: 600; letter-spacing: -0.01em; }
+.as-top { display: flex; flex-direction: column; gap: 0.3rem; margin-left: auto; }
+.as-top .as-label { margin-bottom: 0.1rem; }
+.as-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+
 .facets {
   display: grid;
   gap: 0.6rem;
