@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 /* ====================================================================
    Graphite & Gold.
@@ -18,45 +18,50 @@
    ==================================================================== */
 
 :root {
-  --rail: #22223b;
-  --rail-2: #2f2f4f;
-  --rail-ink: #c9c6d6;
-  --rail-ink-2: #918da6;
+  /* Archify "plate": a near-black rail against cool paper. */
+  --rail: #0f1216;
+  --rail-2: #1b1f24;
+  --rail-ink: #c3c9cd;
+  --rail-ink-2: #949a9f;
 
-  --canvas: #f5f3f0;
-  --panel: #ffffff;
-  --panel-2: #faf8f5;
-  --line: #e6e1d9;
-  --line-2: #d6cfc3;
+  /* Cool paper, not warm ivory. Panels lift off the ground by a hairline
+     ink border rather than a fill jump — Archify is flat and ruled. */
+  --canvas: #e8ecea;
+  --panel: #f8faf9;
+  --panel-2: #edf1ef;
+  --line: rgba(20, 23, 26, 0.13);
+  --line-2: rgba(20, 23, 26, 0.26);
 
-  --ink: #1c1b22;
-  --ink-2: #5f5b55;
-  /* Was #8f8a82, which is 3.4:1 on white and 3.1:1 on the canvas — under AA
-     for the 11-13px secondary text this carries almost everywhere. Darkened
-     to clear 4.5:1 on all three surfaces (white 5.1, panel-2 4.8, canvas 4.6). */
-  --ink-3: #726d65;
+  --ink: #15181b;
+  --ink-2: #363c41;
+  /* Archify "muted", darkened from its #60686d to clear AA on the lightest
+     surface (5.8:1 on the raised panel) — it carries the 11-13px secondary
+     text almost everywhere, and tokens.test.ts enforces the floor. */
+  --ink-3: #585f64;
 
-  /* Gold: --accent fills, --accent-ink for text that must hold contrast.
-     --accent is 3.9:1 on white, so it is legal on large bold figures (the hero
-     KPI) and decoration, and never on body text. Use --accent-ink there. */
-  --accent: #9a7e2f;
-  --accent-ink: #7a6220;
-  --accent-hover: #866c26;
-  --accent-soft: #faf4e4;
-  --accent-line: #e3d5ab;
-  --data: #9a7e2f;
+  /* Archify vermilion is the one hot accent. --accent fills and marks the
+     hero figure (3.6:1, legal on large bold only); --accent-ink is the text
+     value that must hold contrast. Never body text on --accent. */
+  --accent: #e14a0e;
+  --accent-ink: #b03809;
+  --accent-hover: #c23e0b;
+  --accent-soft: #fdeee7;
+  --accent-line: #f2cdb9;
+  --data: #e14a0e;
 
-  /* The share of a payment other people covered. Neutral on purpose: it
-     is money that is not yours, so it recedes rather than competes. */
-  --shared: #e6e1d9;
+  /* The share of a payment other people covered — a cool neutral that recedes. */
+  --shared: #dfe4e2;
 
-  --amber: #bc6c25;
-  --amber-soft: #fdf1e4;
-  --amber-ink: #8f5119;
-  --green: #4f772d;
-  --green-soft: #eef4e7;
-  --red: #9b2226;
-  --purple: #6d597a;
+  /* Semantics on Archify's palette: emerald is money back, rose is money the
+     wrong way, amber wants a decision, violet is a habit. Text-weight values
+     (--*-ink) are darkened to clear AA; the base hues mark and fill. */
+  --amber: #b45309;
+  --amber-soft: #fbf0e2;
+  --amber-ink: #9a4708;
+  --green: #047857;
+  --green-soft: #e7f1ec;
+  --red: #be123c;
+  --purple: #6d28d9;
 
   /* Six families. The group hue leads; its categories are shades of it. */
   --grp-living: #3d6b7d;
@@ -93,8 +98,10 @@
 
   --cat-uncategorized: #bc6c25;
 
-  --ui: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif;
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --grot: "Space Grotesk", "Inter", ui-sans-serif, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* One modular scale, ratio ~1.19 off a 14px base. Every font-size in the
      app is one of these; a one-off rem value is how two headings that should
@@ -108,21 +115,21 @@
   --step-4: 1.625rem;
   --step-5: 2rem;
 
-  --radius: 8px;
-  --radius-lg: 10px;
+  --radius: 10px;
+  --radius-lg: 14px;
   --edge: 1.5rem;
   --sidebar-w: 240px;
   --rail-w: 340px;
 
-  --shadow: 0 1px 2px rgba(34, 34, 59, 0.06);
-  --shadow-pop: 0 10px 30px rgba(34, 34, 59, 0.16);
+  --shadow: 0 1px 2px rgba(20, 23, 26, 0.05);
+  --shadow-pop: 0 22px 54px rgba(20, 23, 26, 0.14);
 
   /* One motion grammar. Durations are read by JS animations too (the donut
      drill interpolates arcs in a rAF loop), so they live here rather than as
      literals in three components that would drift apart. */
   --dur-fast: 120ms;
   --dur-slow: 420ms;
-  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
   color-scheme: light;
 }
@@ -143,7 +150,7 @@ body {
 
 /* Figures line up in columns everywhere, so they are always tabular. */
 .num, .kpi-value, .row-amount, .trow-amount, .trow-share, .trow-date,
-.sheet-amount, .bal-net, .cat-amounts { font-variant-numeric: tabular-nums; }
+.sheet-amount, .bal-net, .cat-amounts { font-variant-numeric: tabular-nums; font-family: var(--mono); }
 
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 input, select, textarea { font: inherit; color: inherit; }
@@ -1653,3 +1660,20 @@ button.insight:hover { border-color: var(--accent-line); background: var(--accen
   .trow-share { grid-area: share; }
   .trow-date, .trow-account { display: none; }
 }
+
+
+/* ==================================================================
+   Archify typography roles (tt-a1i.github.io/archify).
+
+   Fraunces carries the display moments — the view title and the two
+   hero figures. Space Grotesk sets section and brand labels. JetBrains
+   Mono is the money face (above): every aligned figure is mono, so a
+   column of amounts reads like a ledger. Inter is the body.
+   ================================================================== */
+.view-title { font-family: var(--display); font-weight: 400; letter-spacing: -0.01em; }
+.panel-title, .brand { font-family: var(--grot); letter-spacing: -0.01em; }
+/* The hero figure and the ring centre are display serif, overriding the mono
+   money face for the two numbers that are a headline, not a column. */
+.kpi.hero-kpi .kpi-value, .donut-total { font-family: var(--display); font-weight: 500; letter-spacing: -0.01em; }
+/* Specimen-style micro labels: mono, uppercase, widely tracked. */
+.eyebrow, .kpi-label, .field-label, .facet-legend { font-family: var(--mono); letter-spacing: 0.14em; }
